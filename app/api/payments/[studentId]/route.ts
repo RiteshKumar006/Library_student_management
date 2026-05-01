@@ -6,9 +6,10 @@ import { ApiResponse } from '@/types';
 // GET - Payment history for student
 export async function GET(
   request: NextRequest,
-  { params }: { params: { studentId: string } }
+  { params }: { params: Promise<{ studentId: string }> }
 ) {
   try {
+    const { studentId } = await params;
     const token = getTokenFromRequest(request);
     if (!token || !verifyToken(token)) {
       return NextResponse.json(
@@ -21,7 +22,7 @@ export async function GET(
     const paymentsCollection = db.collection('payments');
 
     const payments = await paymentsCollection
-      .find({ studentId: params.studentId })
+      .find({ studentId })
       .sort({ paymentDate: -1 })
       .toArray();
 

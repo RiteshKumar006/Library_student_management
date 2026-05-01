@@ -1,7 +1,7 @@
 'use client';
 
 import { useEffect, useState } from 'react';
-import { useRouter } from 'next/navigation';
+import { usePathname, useRouter } from 'next/navigation';
 import Link from 'next/link';
 import { useAuth } from '@/hooks/useAuth';
 import { Button } from '@/components/ui/button';
@@ -35,7 +35,9 @@ export default function DashboardLayout({
 }) {
   const { isLoggedIn, isLoading, logout } = useAuth();
   const [sidebarOpen, setSidebarOpen] = useState(true);
+  const [mobileNavOpen, setMobileNavOpen] = useState(false);
   const router = useRouter();
+  const pathname = usePathname();
 
   useEffect(() => {
     if (!isLoading && !isLoggedIn) {
@@ -47,8 +49,8 @@ export default function DashboardLayout({
     return (
       <div className="flex items-center justify-center min-h-screen">
         <div className="text-center">
-          <div className="w-12 h-12 border-4 border-blue-200 border-t-blue-600 rounded-full animate-spin mx-auto mb-4"></div>
-          <p className="text-gray-600">Loading...</p>
+          <div className="mx-auto mb-4 h-12 w-12 animate-spin rounded-full border-4 border-slate-200 border-t-slate-950"></div>
+          <p className="text-slate-600">Loading...</p>
         </div>
       </div>
     );
@@ -59,40 +61,132 @@ export default function DashboardLayout({
   }
 
   return (
-    <div className="flex h-screen bg-gray-100">
-      {/* Sidebar */}
+    <div className="min-h-screen bg-[#f6f7f9] text-slate-950 lg:flex">
+      <header className="sticky top-0 z-30 flex h-16 items-center justify-between border-b border-slate-200/80 bg-white/95 px-4 shadow-sm backdrop-blur lg:hidden">
+        <div>
+          <h1 className="text-lg font-bold text-slate-950">LibraryHub</h1>
+          <p className="text-xs font-medium text-slate-500">Admin workspace</p>
+        </div>
+        <button
+          type="button"
+          onClick={() => setMobileNavOpen(true)}
+          className="rounded-lg border border-slate-200 bg-white p-2 text-slate-700 shadow-sm hover:bg-slate-50"
+          aria-label="Open menu"
+        >
+          <Menu size={24} />
+        </button>
+      </header>
+
+      {mobileNavOpen && (
+        <div className="fixed inset-0 z-40 lg:hidden">
+          <button
+            type="button"
+            aria-label="Close menu"
+            className="absolute inset-0 bg-black/40"
+            onClick={() => setMobileNavOpen(false)}
+          />
+          <aside className="relative flex h-full w-[min(86vw,20rem)] flex-col overflow-hidden bg-slate-950 text-white shadow-xl">
+            <div className="flex items-center justify-between border-b border-white/10 p-5">
+              <div>
+                <h1 className="text-2xl font-bold">LibraryHub</h1>
+                <p className="text-xs font-medium text-slate-400">Admin workspace</p>
+              </div>
+              <button
+                type="button"
+                onClick={() => setMobileNavOpen(false)}
+                className="rounded-lg p-2 hover:bg-white/10"
+                aria-label="Close menu"
+              >
+                <X size={22} />
+              </button>
+            </div>
+
+            <nav className="flex-1 space-y-2 overflow-y-auto px-4 py-5">
+              {navItems.map((item) => {
+                const isActive = pathname === item.href;
+                return (
+                  <Link key={item.href} href={item.href} onClick={() => setMobileNavOpen(false)}>
+                    <div
+                      className={`flex items-center gap-3 rounded-lg px-4 py-3 transition-colors ${
+                        isActive
+                          ? 'bg-white text-slate-950 shadow-sm'
+                          : 'text-slate-300 hover:bg-white/10 hover:text-white'
+                      }`}
+                    >
+                      <item.icon size={20} />
+                      <span className="text-sm font-medium">{item.label}</span>
+                    </div>
+                  </Link>
+                );
+              })}
+            </nav>
+
+            <div className="border-t border-slate-700 p-4">
+              <Button
+                onClick={() => {
+                  setMobileNavOpen(false);
+                  logout();
+                }}
+                variant="destructive"
+                size="sm"
+                className="w-full"
+              >
+                <LogOut size={16} />
+                Logout
+              </Button>
+            </div>
+          </aside>
+        </div>
+      )}
+
       <aside
         className={`${
           sidebarOpen ? 'w-64' : 'w-20'
-        } bg-gradient-to-b from-slate-900 to-slate-800 text-white transition-all duration-300 flex flex-col overflow-hidden shadow-lg`}
+        } hidden h-screen flex-col overflow-hidden border-r border-white/10 bg-slate-950 text-white shadow-lg transition-all duration-300 lg:flex`}
       >
-        <div className="p-6 border-b border-slate-700 flex items-center justify-between">
-          {sidebarOpen && <h1 className="text-2xl font-bold">LibraryHub</h1>}
+        <div className="flex items-center justify-between border-b border-white/10 p-5">
+          {sidebarOpen && (
+            <div>
+              <h1 className="text-2xl font-bold">LibraryHub</h1>
+              <p className="text-xs font-medium text-slate-400">Admin workspace</p>
+            </div>
+          )}
           <button
+            type="button"
             onClick={() => setSidebarOpen(!sidebarOpen)}
-            className="p-1 hover:bg-slate-700 rounded"
+            className="rounded-lg p-2 text-slate-300 hover:bg-white/10 hover:text-white"
+            aria-label={sidebarOpen ? 'Collapse sidebar' : 'Expand sidebar'}
           >
             {sidebarOpen ? <X size={20} /> : <Menu size={20} />}
           </button>
         </div>
 
-        <nav className="flex-1 px-4 py-6 space-y-2">
-          {navItems.map((item) => (
-            <Link key={item.href} href={item.href}>
-              <div className="flex items-center gap-3 px-4 py-3 rounded-lg hover:bg-slate-700 transition-colors group">
-                <item.icon size={20} />
-                {sidebarOpen && <span className="text-sm font-medium">{item.label}</span>}
-              </div>
-            </Link>
-          ))}
+        <nav className="flex-1 space-y-2 overflow-y-auto px-3 py-5">
+          {navItems.map((item) => {
+            const isActive = pathname === item.href;
+            return (
+              <Link key={item.href} href={item.href}>
+                <div
+                  className={`flex items-center gap-3 rounded-lg px-4 py-3 transition-colors ${
+                    isActive
+                      ? 'bg-white text-slate-950 shadow-sm'
+                      : 'text-slate-300 hover:bg-white/10 hover:text-white'
+                  } ${sidebarOpen ? '' : 'justify-center px-3'}`}
+                >
+                  <item.icon size={20} />
+                  {sidebarOpen && <span className="text-sm font-medium">{item.label}</span>}
+                </div>
+              </Link>
+            );
+          })}
         </nav>
 
-        <div className="p-4 border-t border-slate-700">
+        <div className="border-t border-white/10 p-4">
           <Button
             onClick={logout}
             variant="destructive"
             size="sm"
-            className="w-full flex items-center gap-2 justify-center"
+            className="flex w-full items-center justify-center gap-2"
           >
             <LogOut size={16} />
             {sidebarOpen && 'Logout'}
@@ -101,8 +195,8 @@ export default function DashboardLayout({
       </aside>
 
       {/* Main content */}
-      <main className="flex-1 overflow-auto">
-        <div className="p-8">{children}</div>
+      <main className="min-w-0 flex-1 lg:h-screen lg:overflow-auto">
+        <div className="mx-auto w-full max-w-[1500px] p-4 sm:p-6 lg:p-8">{children}</div>
       </main>
     </div>
   );

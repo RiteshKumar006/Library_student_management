@@ -31,6 +31,18 @@ export interface Payment {
   createdAt?: Date;
 }
 
+export interface Expense {
+  _id?: string;
+  title: string;
+  amount: number;
+  expenseDate: Date;
+  category: 'rent' | 'electricity' | 'maintenance' | 'salary' | 'supplies' | 'internet' | 'other';
+  paymentMethod: 'cash' | 'upi' | 'check' | 'online';
+  notes?: string;
+  createdAt?: Date;
+  updatedAt?: Date;
+}
+
 export interface Seat {
   _id?: string;
   seatNumber: number;

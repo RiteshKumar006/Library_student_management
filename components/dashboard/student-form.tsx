@@ -26,6 +26,7 @@ export function StudentForm({ student, onSubmit, onCancel, isLoading }: StudentF
       : new Date().toISOString().split('T')[0],
     monthlyFee: student?.monthlyFee || '',
     parentPhone: student?.parentPhone || '',
+    aadharNumber: student?.aadharNumber || '',
     photoUrl: student?.photoUrl || '',
     admittedBy: student?.admittedBy || '',
     initialFeeStatus: student ? 'skip' : 'paid',
@@ -95,8 +96,14 @@ export function StudentForm({ student, onSubmit, onCancel, isLoading }: StudentF
       return;
     }
 
+    const normalizedAadhar = formData.aadharNumber.replace(/\s/g, '');
+    if (normalizedAadhar && !/^\d{12}$/.test(normalizedAadhar)) {
+      setError('Aadhaar number must be 12 digits');
+      return;
+    }
+
     try {
-      await onSubmit(formData);
+      await onSubmit({ ...formData, aadharNumber: normalizedAadhar });
       setSuccess(true);
     } catch (err) {
       setError(err instanceof Error ? err.message : 'An error occurred');
@@ -268,6 +275,23 @@ export function StudentForm({ student, onSubmit, onCancel, isLoading }: StudentF
                 value={formData.parentPhone}
                 onChange={handleChange}
                 placeholder="Optional parent contact"
+                disabled={isLoading}
+              />
+            </div>
+
+            <div className="space-y-2">
+              <label htmlFor="aadharNumber" className="text-sm font-medium text-gray-700">
+                Aadhaar Number
+              </label>
+              <Input
+                id="aadharNumber"
+                name="aadharNumber"
+                type="text"
+                inputMode="numeric"
+                value={formData.aadharNumber}
+                onChange={handleChange}
+                placeholder="12-digit Aadhaar number"
+                maxLength={12}
                 disabled={isLoading}
               />
             </div>

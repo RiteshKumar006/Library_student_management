@@ -86,6 +86,7 @@ export async function POST(request: NextRequest) {
       monthlyFee,
       seatNumber,
       parentPhone,
+      aadharNumber,
       photoUrl,
       admittedBy,
       initialFeeStatus = 'paid',
@@ -114,9 +115,17 @@ export async function POST(request: NextRequest) {
 
     const joining = new Date(joiningDate || new Date());
     const monthlyFeeAmount = parseFloat(monthlyFee);
+    const normalizedAadharNumber = String(aadharNumber || '').replace(/\s/g, '');
     const isInitialFeePaid = initialFeeStatus === 'paid';
     const today = new Date();
     today.setHours(0, 0, 0, 0);
+
+    if (normalizedAadharNumber && !/^\d{12}$/.test(normalizedAadharNumber)) {
+      return NextResponse.json(
+        { success: false, message: 'Aadhaar number must be 12 digits' } as ApiResponse,
+        { status: 400 }
+      );
+    }
 
     if (isInitialFeePaid && !PAYMENT_METHODS.includes(paymentMethod)) {
       return NextResponse.json(
@@ -138,6 +147,7 @@ export async function POST(request: NextRequest) {
       monthlyFee: monthlyFeeAmount,
       seatNumber: seatNumber ? parseInt(seatNumber) : null,
       parentPhone: parentPhone || '',
+      aadharNumber: normalizedAadharNumber,
       photoUrl: photoUrl || '',
       admittedBy: admittedBy || '',
       status: 'active' as const,

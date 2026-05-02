@@ -15,6 +15,7 @@ export interface Student {
   nextDueDate: Date;
   status: 'active' | 'inactive' | 'overdue';
   parentPhone?: string;
+  aadharNumber?: string;
   photoUrl?: string;
   admittedBy?: string;
   createdAt?: Date;

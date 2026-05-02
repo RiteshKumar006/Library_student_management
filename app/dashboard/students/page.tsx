@@ -448,6 +448,7 @@ function StudentDetails({
             <InfoRow label="Student Name" value={student.name} />
             <InfoRow label="Phone Number" value={student.phone} />
             <InfoRow label="Parent Phone" value={student.parentPhone || 'Not added'} />
+            <InfoRow label="Aadhaar Number" value={student.aadharNumber || 'Not added'} />
             <InfoRow label="Seat Number" value={String(student.seatNumber)} />
             <InfoRow label="Joining Date" value={new Date(student.joiningDate).toLocaleDateString('en-IN')} />
             <InfoRow label="Next Due Date" value={new Date(student.nextDueDate).toLocaleDateString('en-IN')} />

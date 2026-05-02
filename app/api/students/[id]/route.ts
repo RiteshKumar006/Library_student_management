@@ -85,6 +85,15 @@ export async function PUT(
     }
 
     const body = await request.json();
+    const normalizedAadharNumber = String(body.aadharNumber || '').replace(/\s/g, '');
+
+    if (normalizedAadharNumber && !/^\d{12}$/.test(normalizedAadharNumber)) {
+      return NextResponse.json(
+        { success: false, message: 'Aadhaar number must be 12 digits' } as ApiResponse,
+        { status: 400 }
+      );
+    }
+
     const db = await getDatabase();
     const studentsCollection = db.collection('students');
 
@@ -110,6 +119,7 @@ export async function PUT(
       name: body.name,
       phone: body.phone,
       parentPhone: body.parentPhone || '',
+      aadharNumber: normalizedAadharNumber,
       photoUrl: body.photoUrl || '',
       admittedBy: body.admittedBy || '',
       updatedAt: new Date(),

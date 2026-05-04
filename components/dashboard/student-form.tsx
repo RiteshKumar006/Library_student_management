@@ -1,13 +1,13 @@
 'use client';
 
-import { useState } from 'react';
-import { Student } from '@/types';
+import { useEffect, useState } from 'react';
+import { ApiResponse, Seat, Student } from '@/types';
 import { Button } from '@/components/ui/button';
 import { Input } from '@/components/ui/input';
 import { Card, CardContent, CardHeader, CardTitle } from '@/components/ui/card';
 import { Alert, AlertDescription } from '@/components/ui/alert';
 import { AlertCircle, Upload, X } from 'lucide-react';
-import { PAYMENT_METHODS, SEAT_RANGE } from '@/lib/constants';
+import { PAYMENT_METHODS } from '@/lib/constants';
 
 interface StudentFormProps {
   student?: Student;
@@ -35,6 +35,41 @@ export function StudentForm({ student, onSubmit, onCancel, isLoading }: StudentF
 
   const [error, setError] = useState('');
   const [success, setSuccess] = useState(false);
+  const [seats, setSeats] = useState<Seat[]>([]);
+  const [isSeatsLoading, setIsSeatsLoading] = useState(true);
+
+  useEffect(() => {
+    const fetchSeats = async () => {
+      try {
+        setIsSeatsLoading(true);
+        const token = localStorage.getItem('authToken');
+        const response = await fetch('/api/seats', {
+          headers: {
+            Authorization: `Bearer ${token}`,
+          },
+        });
+
+        if (!response.ok) {
+          throw new Error('Failed to load seats');
+        }
+
+        const result = (await response.json()) as ApiResponse<{ seats: Seat[] }>;
+        setSeats(result.data?.seats || []);
+      } catch (err) {
+        console.error('[v0] Seats fetch error:', err);
+        setError('Unable to load available seats');
+      } finally {
+        setIsSeatsLoading(false);
+      }
+    };
+
+    fetchSeats();
+  }, []);
+
+  const currentSeatNumber = student?.seatNumber ? Number(student.seatNumber) : null;
+  const availableSeats = seats.filter(
+    (seat) => seat.isAvailable || seat.seatNumber === currentSeatNumber
+  );
 
   const handleChange = (e: React.ChangeEvent<HTMLInputElement | HTMLSelectElement>) => {
     const { name, value } = e.target;
@@ -223,10 +258,10 @@ export function StudentForm({ student, onSubmit, onCancel, isLoading }: StudentF
                 required
                 className="w-full px-3 py-2 border border-gray-300 rounded-md shadow-sm focus:outline-none focus:ring-blue-500 focus:border-blue-500"
               >
-                <option value="">Select a seat</option>
-                {Array.from({ length: SEAT_RANGE }, (_, i) => (
-                  <option key={i + 1} value={i + 1}>
-                    Seat {i + 1}
+                <option value="">{isSeatsLoading ? 'Loading seats...' : 'Select a seat'}</option>
+                {availableSeats.map((seat) => (
+                  <option key={seat.seatNumber} value={seat.seatNumber}>
+                    Seat {seat.seatNumber}
                   </option>
                 ))}
               </select>

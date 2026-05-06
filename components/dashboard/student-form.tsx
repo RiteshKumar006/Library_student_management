@@ -6,7 +6,7 @@ import { Button } from '@/components/ui/button';
 import { Input } from '@/components/ui/input';
 import { Card, CardContent, CardHeader, CardTitle } from '@/components/ui/card';
 import { Alert, AlertDescription } from '@/components/ui/alert';
-import { AlertCircle, Upload, X } from 'lucide-react';
+import { AlertCircle, Upload, X, User, Phone, Users, Calendar, DollarSign, CreditCard, Check, ArrowRight } from 'lucide-react';
 import { PAYMENT_METHODS } from '@/lib/constants';
 
 interface StudentFormProps {
@@ -37,6 +37,7 @@ export function StudentForm({ student, onSubmit, onCancel, isLoading }: StudentF
   const [success, setSuccess] = useState(false);
   const [seats, setSeats] = useState<Seat[]>([]);
   const [isSeatsLoading, setIsSeatsLoading] = useState(true);
+  const [dragActive, setDragActive] = useState(false);
 
   useEffect(() => {
     const fetchSeats = async () => {
@@ -79,6 +80,10 @@ export function StudentForm({ student, onSubmit, onCancel, isLoading }: StudentF
 
   const handlePhotoChange = (e: React.ChangeEvent<HTMLInputElement>) => {
     const file = e.target.files?.[0];
+    processPhotoFile(file);
+  };
+
+  const processPhotoFile = (file: File | undefined) => {
     setError('');
 
     if (!file) {
@@ -103,6 +108,26 @@ export function StudentForm({ student, onSubmit, onCancel, isLoading }: StudentF
       setError('Unable to read selected photo');
     };
     reader.readAsDataURL(file);
+  };
+
+  const handleDrag = (e: React.DragEvent) => {
+    e.preventDefault();
+    e.stopPropagation();
+    if (e.type === 'dragenter' || e.type === 'dragover') {
+      setDragActive(true);
+    } else if (e.type === 'dragleave') {
+      setDragActive(false);
+    }
+  };
+
+  const handleDrop = (e: React.DragEvent) => {
+    e.preventDefault();
+    e.stopPropagation();
+    setDragActive(false);
+
+    if (e.dataTransfer.files && e.dataTransfer.files[0]) {
+      processPhotoFile(e.dataTransfer.files[0]);
+    }
   };
 
   const handleSubmit = async (e: React.FormEvent) => {
@@ -146,15 +171,19 @@ export function StudentForm({ student, onSubmit, onCancel, isLoading }: StudentF
   };
 
   return (
-    <Card>
-      <CardHeader className="flex flex-row items-center justify-between space-y-0 pb-6">
-        <CardTitle>{student ? 'Edit Student' : 'Add New Student'}</CardTitle>
-        <button onClick={onCancel} className="p-1 hover:bg-gray-100 rounded">
-          <X size={20} />
+    <Card className="border-0 shadow-lg">
+      {/* Header */}
+      <CardHeader className="bg-gradient-to-r from-blue-600 to-indigo-600 text-white pb-6 flex flex-row items-center justify-between space-y-0 rounded-t-lg">
+        <div>
+          <CardTitle className="text-white text-2xl">{student ? '✏️ Edit Student' : '➕ Add New Student'}</CardTitle>
+          <p className="text-blue-100 text-sm mt-1">{student ? 'Update student information' : 'Register a new student to the library'}</p>
+        </div>
+        <button onClick={onCancel} className="p-2 hover:bg-white hover:bg-opacity-20 rounded-full transition-all">
+          <X size={24} />
         </button>
       </CardHeader>
 
-      <CardContent>
+      <CardContent className="pt-6">
         {error && (
           <Alert variant="destructive" className="mb-6">
             <AlertCircle className="h-4 w-4" />
@@ -164,244 +193,232 @@ export function StudentForm({ student, onSubmit, onCancel, isLoading }: StudentF
 
         {success && (
           <Alert className="mb-6 border-green-200 bg-green-50">
-            <AlertCircle className="h-4 w-4 text-green-600" />
+            <Check className="h-4 w-4 text-green-600" />
             <AlertDescription className="text-green-800">
-              Student {student ? 'updated' : 'created'} successfully
+              ✓ Student {student ? 'updated' : 'created'} successfully!
             </AlertDescription>
           </Alert>
         )}
 
-        <form onSubmit={handleSubmit} className="space-y-4">
-          <div className="grid grid-cols-1 md:grid-cols-2 gap-4">
-            <div className="space-y-2 md:col-span-2">
-              <label htmlFor="photo" className="text-sm font-medium text-gray-700">
-                Student Photo
-              </label>
-              <div className="flex flex-col gap-3 sm:flex-row sm:items-center">
-                <div className="flex h-24 w-24 shrink-0 items-center justify-center overflow-hidden rounded-md border border-gray-300 bg-gray-50">
-                  {formData.photoUrl ? (
-                    <img
-                      src={formData.photoUrl}
-                      alt="Student preview"
-                      className="h-full w-full object-cover"
-                    />
-                  ) : (
-                    <Upload className="h-7 w-7 text-gray-400" />
-                  )}
-                </div>
-                <div className="flex-1 space-y-2">
-                  <Input
-                    id="photo"
-                    name="photo"
-                    type="file"
-                    accept="image/*"
-                    onChange={handlePhotoChange}
-                    disabled={isLoading}
-                  />
-                  {formData.photoUrl && (
-                    <Button
-                      type="button"
-                      variant="outline"
-                      size="sm"
-                      onClick={() => setFormData((prev) => ({ ...prev, photoUrl: '' }))}
-                      disabled={isLoading}
-                    >
-                      Remove Photo
-                    </Button>
-                  )}
-                </div>
-              </div>
-            </div>
+        <form onSubmit={handleSubmit} className="space-y-6">
+          {/* Photo Upload Section */}
+          <PhotoUploadSection
+            photoUrl={formData.photoUrl}
+            isLoading={isLoading}
+            onPhotoChange={handlePhotoChange}
+            onPhotoClear={() => setFormData((prev) => ({ ...prev, photoUrl: '' }))}
+            onDrag={handleDrag}
+            onDrop={handleDrop}
+            dragActive={dragActive}
+          />
 
-            <div className="space-y-2">
-              <label htmlFor="name" className="text-sm font-medium text-gray-700">
-                Student Name *
-              </label>
-              <Input
-                id="name"
+          {/* Personal Information */}
+          <FormSection title="Personal Information" icon={<User size={18} />} description="Basic student details">
+            <div className="grid grid-cols-1 md:grid-cols-2 gap-4">
+              <FormField
+                label="Student Name"
                 name="name"
                 type="text"
+                placeholder="Full name"
                 value={formData.name}
                 onChange={handleChange}
-                placeholder="Enter student name"
                 disabled={isLoading}
                 required
+                icon={<User size={16} />}
               />
-            </div>
-
-            <div className="space-y-2">
-              <label htmlFor="phone" className="text-sm font-medium text-gray-700">
-                Phone Number *
-              </label>
-              <Input
-                id="phone"
+              <FormField
+                label="Phone Number"
                 name="phone"
                 type="tel"
+                placeholder="10-digit mobile"
                 value={formData.phone}
                 onChange={handleChange}
-                placeholder="10-digit phone number"
                 disabled={isLoading}
                 required
+                icon={<Phone size={16} />}
               />
-            </div>
-
-            <div className="space-y-2">
-              <label htmlFor="seatNumber" className="text-sm font-medium text-gray-700">
-                Seat Number *
-              </label>
-              <select
-                id="seatNumber"
-                name="seatNumber"
-                value={formData.seatNumber}
+              <FormField
+                label="Parent Phone"
+                name="parentPhone"
+                type="tel"
+                placeholder="Optional"
+                value={formData.parentPhone}
                 onChange={handleChange}
                 disabled={isLoading}
-                required
-                className="w-full px-3 py-2 border border-gray-300 rounded-md shadow-sm focus:outline-none focus:ring-blue-500 focus:border-blue-500"
-              >
-                <option value="">{isSeatsLoading ? 'Loading seats...' : 'Select a seat'}</option>
-                {availableSeats.map((seat) => (
-                  <option key={seat.seatNumber} value={seat.seatNumber}>
-                    Seat {seat.seatNumber}
-                  </option>
-                ))}
-              </select>
+                icon={<Phone size={16} />}
+              />
+              <FormField
+                label="Aadhaar Number"
+                name="aadharNumber"
+                type="text"
+                placeholder="12-digit Aadhaar"
+                value={formData.aadharNumber}
+                onChange={handleChange}
+                disabled={isLoading}
+                maxLength={12}
+                icon={<Users size={16} />}
+              />
             </div>
+          </FormSection>
 
-            <div className="space-y-2">
-              <label htmlFor="joiningDate" className="text-sm font-medium text-gray-700">
-                Joining Date *
-              </label>
-              <Input
-                id="joiningDate"
+          {/* Seat & Schedule */}
+          <FormSection title="Seat & Schedule" icon={<Calendar size={18} />} description="Assign seat and enrollment date">
+            <div className="grid grid-cols-1 md:grid-cols-2 gap-4">
+              <div className="space-y-2">
+                <label className="text-sm font-medium text-gray-700 flex items-center gap-2">
+                  <Users size={16} />
+                  Seat Number <span className="text-red-500">*</span>
+                </label>
+                <select
+                  name="seatNumber"
+                  value={formData.seatNumber}
+                  onChange={handleChange}
+                  disabled={isLoading}
+                  required
+                  className="w-full px-4 py-2 border-2 border-gray-200 rounded-lg shadow-sm focus:outline-none focus:ring-2 focus:ring-blue-500 focus:border-transparent transition-all"
+                >
+                  <option value="">{isSeatsLoading ? 'Loading seats...' : `Select a seat (${availableSeats.length} available)`}</option>
+                  {availableSeats.map((seat) => (
+                    <option key={seat.seatNumber} value={seat.seatNumber}>
+                      Seat {seat.seatNumber} {!seat.isAvailable && '(Current)'}
+                    </option>
+                  ))}
+                </select>
+              </div>
+              <FormField
+                label="Joining Date"
                 name="joiningDate"
                 type="date"
                 value={formData.joiningDate}
                 onChange={handleChange}
                 disabled={isLoading}
                 required
+                icon={<Calendar size={16} />}
               />
             </div>
+          </FormSection>
 
-            <div className="space-y-2">
-              <label htmlFor="monthlyFee" className="text-sm font-medium text-gray-700">
-                Monthly Fee (₹) *
-              </label>
-              <Input
-                id="monthlyFee"
+          {/* Fee Information */}
+          <FormSection title="Fee Information" icon={<DollarSign size={18} />} description="Monthly fee details">
+            <div className="grid grid-cols-1 md:grid-cols-2 gap-4">
+              <FormField
+                label="Monthly Fee (₹)"
                 name="monthlyFee"
                 type="number"
                 step="0.01"
+                placeholder="Enter amount"
                 value={formData.monthlyFee}
                 onChange={handleChange}
-                placeholder="Enter monthly fee"
                 disabled={isLoading}
                 required
+                icon={<DollarSign size={16} />}
               />
-            </div>
-
-            <div className="space-y-2">
-              <label htmlFor="parentPhone" className="text-sm font-medium text-gray-700">
-                Parent Phone Number
-              </label>
-              <Input
-                id="parentPhone"
-                name="parentPhone"
-                type="tel"
-                value={formData.parentPhone}
-                onChange={handleChange}
-                placeholder="Optional parent contact"
-                disabled={isLoading}
-              />
-            </div>
-
-            <div className="space-y-2">
-              <label htmlFor="aadharNumber" className="text-sm font-medium text-gray-700">
-                Aadhaar Number
-              </label>
-              <Input
-                id="aadharNumber"
-                name="aadharNumber"
-                type="text"
-                inputMode="numeric"
-                value={formData.aadharNumber}
-                onChange={handleChange}
-                placeholder="12-digit Aadhaar number"
-                maxLength={12}
-                disabled={isLoading}
-              />
-            </div>
-
-            <div className="space-y-2">
-              <label htmlFor="admittedBy" className="text-sm font-medium text-gray-700">
-                Admitted By
-              </label>
-              <Input
-                id="admittedBy"
+              <FormField
+                label="Admitted By"
                 name="admittedBy"
                 type="text"
+                placeholder="Staff/Admin name"
                 value={formData.admittedBy}
                 onChange={handleChange}
-                placeholder="Enter staff/admin name"
                 disabled={isLoading}
+                icon={<User size={16} />}
               />
             </div>
+          </FormSection>
 
-            {!student && (
-              <>
-                <div className="space-y-2">
-                  <label htmlFor="initialFeeStatus" className="text-sm font-medium text-gray-700">
-                    First Month Fee *
-                  </label>
-                  <select
-                    id="initialFeeStatus"
-                    name="initialFeeStatus"
-                    value={formData.initialFeeStatus}
-                    onChange={handleChange}
-                    disabled={isLoading}
-                    required
-                    className="w-full px-3 py-2 border border-gray-300 rounded-md shadow-sm focus:outline-none focus:ring-blue-500 focus:border-blue-500"
-                  >
-                    <option value="paid">Paid now</option>
-                    <option value="pending">Not paid yet</option>
-                  </select>
+          {/* Initial Payment Section (Only for new students) */}
+          {!student && (
+            <FormSection title="Initial Payment" icon={<CreditCard size={18} />} description="First month fee payment">
+              <div className="space-y-4">
+                <div className="flex gap-3">
+                  {['paid', 'pending'].map((status) => (
+                    <label
+                      key={status}
+                      className={`flex-1 p-4 border-2 rounded-lg cursor-pointer transition-all ${
+                        formData.initialFeeStatus === status
+                          ? 'border-blue-500 bg-blue-50'
+                          : 'border-gray-200 hover:border-gray-300'
+                      }`}
+                    >
+                      <input
+                        type="radio"
+                        name="initialFeeStatus"
+                        value={status}
+                        checked={formData.initialFeeStatus === status}
+                        onChange={handleChange}
+                        className="mr-2"
+                      />
+                      <span className="font-medium">
+                        {status === 'paid' ? '💳 Paid Now' : '⏳ Not Paid Yet'}
+                      </span>
+                      <p className="text-xs text-gray-600 mt-1">
+                        {status === 'paid' ? 'Record payment on enrollment' : 'Collect later'}
+                      </p>
+                    </label>
+                  ))}
                 </div>
 
                 {formData.initialFeeStatus === 'paid' && (
-                  <div className="space-y-2">
-                    <label htmlFor="paymentMethod" className="text-sm font-medium text-gray-700">
-                      Payment Method *
+                  <div className="space-y-2 pt-4 border-t">
+                    <label className="text-sm font-medium text-gray-700 flex items-center gap-2">
+                      <CreditCard size={16} />
+                      Payment Method <span className="text-red-500">*</span>
                     </label>
-                    <select
-                      id="paymentMethod"
-                      name="paymentMethod"
-                      value={formData.paymentMethod}
-                      onChange={handleChange}
-                      disabled={isLoading}
-                      required
-                      className="w-full px-3 py-2 border border-gray-300 rounded-md shadow-sm focus:outline-none focus:ring-blue-500 focus:border-blue-500"
-                    >
+                    <div className="grid grid-cols-2 md:grid-cols-4 gap-3">
                       {PAYMENT_METHODS.map((method) => (
-                        <option key={method} value={method}>
-                          {method.charAt(0).toUpperCase() + method.slice(1)}
-                        </option>
+                        <label
+                          key={method}
+                          className={`p-3 border-2 rounded-lg cursor-pointer text-center transition-all ${
+                            formData.paymentMethod === method
+                              ? 'border-blue-500 bg-blue-50'
+                              : 'border-gray-200 hover:border-gray-300'
+                          }`}
+                        >
+                          <input
+                            type="radio"
+                            name="paymentMethod"
+                            value={method}
+                            checked={formData.paymentMethod === method}
+                            onChange={handleChange}
+                            className="hidden"
+                          />
+                          <span className="text-sm font-medium capitalize">
+                            {method === 'cash' && '💵'}
+                            {method === 'upi' && '📱'}
+                            {method === 'check' && '📋'}
+                            {method === 'online' && '🏦'}
+                            {' ' + method}
+                          </span>
+                        </label>
                       ))}
-                    </select>
+                    </div>
                   </div>
                 )}
-              </>
-            )}
-          </div>
+              </div>
+            </FormSection>
+          )}
 
+          {/* Action Buttons */}
           <div className="flex justify-end gap-3 pt-6 border-t">
-            <Button variant="outline" onClick={onCancel} disabled={isLoading}>
+            <Button variant="outline" onClick={onCancel} disabled={isLoading} className="px-6">
               Cancel
             </Button>
             <Button
               type="submit"
               disabled={isLoading}
-              className="bg-blue-600 hover:bg-blue-700"
+              className="bg-gradient-to-r from-blue-600 to-indigo-600 hover:from-blue-700 hover:to-indigo-700 text-white px-6 flex items-center gap-2"
             >
-              {isLoading ? 'Saving...' : student ? 'Update Student' : 'Add Student'}
+              {isLoading ? (
+                <>
+                  <div className="w-4 h-4 border-2 border-white border-t-transparent rounded-full animate-spin"></div>
+                  Saving...
+                </>
+              ) : (
+                <>
+                  {student ? '✏️ Update Student' : '➕ Add Student'}
+                  <ArrowRight size={16} />
+                </>
+              )}
             </Button>
           </div>
         </form>
@@ -409,3 +426,176 @@ export function StudentForm({ student, onSubmit, onCancel, isLoading }: StudentF
     </Card>
   );
 }
+
+function FormSection({
+  title,
+  description,
+  icon,
+  children,
+}: {
+  title: string;
+  description: string;
+  icon: React.ReactNode;
+  children: React.ReactNode;
+}) {
+  return (
+    <div className="space-y-3 p-4 bg-gradient-to-br from-gray-50 to-white rounded-lg border border-gray-200 hover:border-gray-300 transition-all">
+      <div className="flex items-center gap-2">
+        <div className="p-2 bg-blue-100 rounded-lg text-blue-600">{icon}</div>
+        <div>
+          <h3 className="font-semibold text-gray-900">{title}</h3>
+          <p className="text-xs text-gray-600">{description}</p>
+        </div>
+      </div>
+      <div className="pt-2">{children}</div>
+    </div>
+  );
+}
+
+function FormField({
+  label,
+  name,
+  type = 'text',
+  placeholder = '',
+  value,
+  onChange,
+  disabled = false,
+  required = false,
+  icon,
+  maxLength,
+  step,
+}: {
+  label: string;
+  name: string;
+  type?: string;
+  placeholder?: string;
+  value: any;
+  onChange: (e: React.ChangeEvent<HTMLInputElement>) => void;
+  disabled?: boolean;
+  required?: boolean;
+  icon?: React.ReactNode;
+  maxLength?: number;
+  step?: string;
+}) {
+  return (
+    <div className="space-y-2">
+      <label htmlFor={name} className="text-sm font-medium text-gray-700 flex items-center gap-2">
+        {icon && <span className="text-gray-500">{icon}</span>}
+        {label}
+        {required && <span className="text-red-500">*</span>}
+      </label>
+      <Input
+        id={name}
+        name={name}
+        type={type}
+        value={value}
+        onChange={onChange}
+        placeholder={placeholder}
+        disabled={disabled}
+        required={required}
+        maxLength={maxLength}
+        step={step}
+        className="border-2 border-gray-200 focus:border-blue-500 focus:ring-2 focus:ring-blue-200 transition-all"
+      />
+    </div>
+  );
+}
+
+function PhotoUploadSection({
+  photoUrl,
+  isLoading,
+  onPhotoChange,
+  onPhotoClear,
+  onDrag,
+  onDrop,
+  dragActive,
+}: {
+  photoUrl: string;
+  isLoading?: boolean;
+  onPhotoChange: (e: React.ChangeEvent<HTMLInputElement>) => void;
+  onPhotoClear: () => void;
+  onDrag: (e: React.DragEvent) => void;
+  onDrop: (e: React.DragEvent) => void;
+  dragActive: boolean;
+}) {
+  return (
+    <div className="space-y-3 p-4 bg-gradient-to-br from-blue-50 to-indigo-50 rounded-lg border-2 border-blue-200">
+      <div className="flex items-center gap-2">
+        <div className="p-2 bg-blue-100 rounded-lg text-blue-600">
+          <Upload size={18} />
+        </div>
+        <div>
+          <h3 className="font-semibold text-gray-900">Student Photo</h3>
+          <p className="text-xs text-gray-600">Upload a clear profile photo (Max 1MB)</p>
+        </div>
+      </div>
+
+      <div className="flex flex-col gap-3 sm:flex-row sm:items-center">
+        {/* Photo Preview */}
+        <div
+          className={`flex h-28 w-28 shrink-0 items-center justify-center overflow-hidden rounded-lg border-2 transition-all ${
+            photoUrl
+              ? 'border-green-300 bg-green-50'
+              : dragActive
+                ? 'border-blue-500 border-dashed bg-blue-50'
+                : 'border-gray-300 bg-white'
+          }`}
+          onDragEnter={onDrag}
+          onDragLeave={onDrag}
+          onDragOver={onDrag}
+          onDrop={onDrop}
+        >
+          {photoUrl ? (
+            <img src={photoUrl} alt="Student preview" className="h-full w-full object-cover" />
+          ) : (
+            <div className="text-center">
+              <Upload className="h-8 w-8 text-gray-400 mx-auto mb-1" />
+              <p className="text-xs text-gray-500">Drag here</p>
+            </div>
+          )}
+        </div>
+
+        {/* Upload Controls */}
+        <div className="flex-1 space-y-3">
+          <div className="relative">
+            <Input
+              id="photo"
+              name="photo"
+              type="file"
+              accept="image/*"
+              onChange={onPhotoChange}
+              disabled={isLoading}
+              className="hidden"
+            />
+            <label
+              htmlFor="photo"
+              className="flex items-center justify-center gap-2 px-4 py-2 bg-white border-2 border-gray-300 hover:border-blue-500 rounded-lg cursor-pointer transition-all font-medium text-sm"
+            >
+              <Upload size={16} />
+              Choose Photo
+            </label>
+          </div>
+
+          {photoUrl && (
+            <Button
+              type="button"
+              variant="outline"
+              size="sm"
+              onClick={onPhotoClear}
+              disabled={isLoading}
+              className="w-full"
+            >
+              ✕ Remove Photo
+            </Button>
+          )}
+
+          <p className="text-xs text-gray-600">
+            💡 Tip: You can also drag and drop an image onto the preview area
+          </p>
+        </div>
+      </div>
+    </div>
+  );
+}
+
+           

@@ -1,7 +1,7 @@
 import { NextRequest, NextResponse } from 'next/server';
 import { getDatabase } from '@/lib/db';
 import { getTokenFromRequest, verifyToken } from '@/lib/auth';
-import { Student, ApiResponse } from '@/types';
+import { Student, FeeRecord, ApiResponse } from '@/types';
 import { PAYMENT_METHODS } from '@/lib/constants';
 
 function calculateStatus(nextDueDate: Date): 'active' | 'overdue' {
@@ -103,6 +103,7 @@ export async function POST(request: NextRequest) {
     const db = await getDatabase();
     const studentsCollection = db.collection('students');
     const paymentsCollection = db.collection('payments');
+    const feeRecordsCollection = db.collection('feeRecords');
 
     // Check for duplicate phone
     const existingStudent = await studentsCollection.findOne({ phone });
@@ -151,6 +152,10 @@ export async function POST(request: NextRequest) {
       photoUrl: photoUrl || '',
       admittedBy: admittedBy || '',
       status: 'active' as const,
+      paidMonths: isInitialFeePaid
+        ? [{ month: joining.getMonth(), year: joining.getFullYear(), paidDate: joining }]
+        : [],
+      totalFeesCollected: isInitialFeePaid ? monthlyFeeAmount : 0,
       createdAt: new Date(),
       updatedAt: new Date(),
     };
@@ -159,14 +164,36 @@ export async function POST(request: NextRequest) {
     const studentId = result.insertedId.toString();
 
     if (isInitialFeePaid) {
-      await paymentsCollection.insertOne({
+      const joiningMonth = joining.getMonth();
+      const joiningYear = joining.getFullYear();
+
+      const payment = await paymentsCollection.insertOne({
         studentId,
         amount: monthlyFeeAmount,
         paymentDate: joining,
         paymentMethod,
         notes: 'Initial fee paid at enrollment',
+        monthsCovered: [{ month: joiningMonth, year: joiningYear }],
         createdAt: new Date(),
       });
+
+      const paymentId = payment.insertedId.toString();
+
+      // Create fee record for the joining month
+      const dueDate = new Date(joiningYear, joiningMonth + 1, 0); // Last day of joining month
+      const feeRecord: FeeRecord = {
+        studentId,
+        month: joiningMonth,
+        year: joiningYear,
+        amount: monthlyFeeAmount,
+        status: 'paid',
+        paymentId,
+        dueDate,
+        paidDate: joining,
+        createdAt: new Date(),
+        updatedAt: new Date(),
+      };
+      await feeRecordsCollection.insertOne(feeRecord);
     }
 
     return NextResponse.json(

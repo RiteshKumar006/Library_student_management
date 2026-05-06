@@ -1,12 +1,12 @@
 'use client';
 
-import { useState } from 'react';
-import { Student } from '@/types';
+import { useState, useEffect } from 'react';
+import { Student, FeeRecord, ApiResponse } from '@/types';
 import { Button } from '@/components/ui/button';
 import { Input } from '@/components/ui/input';
 import { Card, CardContent, CardHeader, CardTitle } from '@/components/ui/card';
 import { Alert, AlertDescription } from '@/components/ui/alert';
-import { AlertCircle, X } from 'lucide-react';
+import { AlertCircle, X, Plus, Trash2, CheckCircle2 } from 'lucide-react';
 import { PAYMENT_METHODS } from '@/lib/constants';
 
 interface PaymentFormProps {
@@ -17,6 +17,7 @@ interface PaymentFormProps {
     paymentDate: string;
     paymentMethod: string;
     notes?: string;
+    monthsCovered?: { month: number; year: number }[];
   }) => Promise<void>;
   onCancel: () => void;
   isLoading?: boolean;
@@ -35,14 +36,103 @@ export function PaymentForm({
     notes: '',
   });
 
+  const [selectedMonths, setSelectedMonths] = useState<{ month: number; year: number }[]>([]);
   const [error, setError] = useState('');
   const [success, setSuccess] = useState(false);
+  const [feeRecords, setFeeRecords] = useState<FeeRecord[]>([]);
+  const [loadingFeeRecords, setLoadingFeeRecords] = useState(true);
+
+  // Fetch fee records for this student
+  useEffect(() => {
+    const fetchFeeRecords = async () => {
+      try {
+        setLoadingFeeRecords(true);
+        const token = localStorage.getItem('authToken');
+        const response = await fetch(`/api/fee-records?studentId=${student._id}`, {
+          headers: {
+            Authorization: `Bearer ${token}`,
+          },
+        });
+
+        if (response.ok) {
+          const data = (await response.json()) as ApiResponse<FeeRecord[]>;
+          setFeeRecords(Array.isArray(data.data) ? data.data : []);
+        }
+      } catch (err) {
+        console.error('Error fetching fee records:', err);
+      } finally {
+        setLoadingFeeRecords(false);
+      }
+    };
+
+    if (student._id) {
+      fetchFeeRecords();
+    }
+  }, [student._id]);
+
+  // Generate available months for selection (current month and previous 12 months)
+  const generateAvailableMonths = () => {
+    const months = [];
+    const today = new Date();
+    const currentYear = today.getFullYear();
+    
+    // Show all 12 months of current year
+    for (let i = 0; i < 12; i++) {
+      const date = new Date(currentYear, i, 1);
+      months.push({
+        month: date.getMonth(),
+        year: date.getFullYear(),
+        label: date.toLocaleDateString('en-US', { month: 'short' }),
+        fullLabel: date.toLocaleDateString('en-US', { month: 'long' }),
+      });
+    }
+    
+    // Sort by month ascending
+    return months.sort((a, b) => a.month - b.month);
+  };
+
+  // Check if a month is already paid
+  const isMonthPaid = (month: number, year: number) => {
+    return feeRecords.some(
+      (record: FeeRecord) => record.month === month && record.year === year && record.status === 'paid'
+    );
+  };
+
+  // Get status of a month
+  const getMonthStatus = (month: number, year: number) => {
+    const record = feeRecords.find(
+      (r: FeeRecord) => r.month === month && r.year === year
+    );
+    return record?.status || 'unpaid';
+  };
+
+  const availableMonths = generateAvailableMonths();
 
   const handleChange = (e: React.ChangeEvent<HTMLInputElement | HTMLSelectElement | HTMLTextAreaElement>) => {
     const { name, value } = e.target;
     setFormData((prev) => ({ ...prev, [name]: value }));
     setError('');
   };
+
+  const handleMonthToggle = (month: number, year: number) => {
+    setSelectedMonths(prev => {
+      const exists = prev.find(m => m.month === month && m.year === year);
+      if (exists) {
+        return prev.filter(m => !(m.month === month && m.year === year));
+      } else {
+        return [...prev, { month, year }];
+      }
+    });
+  };
+
+  const calculateTotalAmount = () => {
+    if (selectedMonths.length === 0) return student.monthlyFee;
+    return selectedMonths.length * student.monthlyFee;
+  };
+
+  useEffect(() => {
+    setFormData(prev => ({ ...prev, amount: calculateTotalAmount() }));
+  }, [selectedMonths, student.monthlyFee]);
 
   const handleSubmit = async (e: React.FormEvent) => {
     e.preventDefault();
@@ -54,6 +144,11 @@ export function PaymentForm({
       return;
     }
 
+    if (selectedMonths.length === 0) {
+      setError('Please select at least one month to cover');
+      return;
+    }
+
     try {
       await onSubmit({
         studentId: student._id!,
@@ -61,6 +156,7 @@ export function PaymentForm({
         paymentDate: formData.paymentDate,
         paymentMethod: formData.paymentMethod,
         notes: formData.notes,
+        monthsCovered: selectedMonths,
       });
       setSuccess(true);
       setTimeout(() => onCancel(), 1500);
@@ -154,6 +250,91 @@ export function PaymentForm({
                   </option>
                 ))}
               </select>
+            </div>
+
+            <div className="space-y-3 md:col-span-2">
+              <div className="flex items-center justify-between">
+                <label className="text-sm font-medium text-gray-700">
+                  Months to Cover * <span className="text-gray-500 text-xs">({new Date().getFullYear()})</span>
+                </label>
+              </div>
+              
+              {/* Month Grid */}
+              <div className="bg-gray-50 p-4 rounded-lg border border-gray-200">
+                <div className="grid grid-cols-3 md:grid-cols-6 gap-2">
+                  {availableMonths.map(({ month, year, label, fullLabel }) => {
+                    const paid = isMonthPaid(month, year);
+                    const isSelected = selectedMonths.some(m => m.month === month && m.year === year);
+                    const status = getMonthStatus(month, year);
+                    
+                    return (
+                      <button
+                        key={`${year}-${month}`}
+                        type="button"
+                        onClick={() => !paid && handleMonthToggle(month, year)}
+                        disabled={paid || isLoading}
+                        title={fullLabel}
+                        className={`relative p-3 rounded-lg font-medium text-sm transition-all duration-200 border-2 ${
+                          paid
+                            ? 'bg-green-100 border-green-400 text-green-700 cursor-not-allowed shadow-sm'
+                            : isSelected
+                              ? 'bg-blue-500 border-blue-600 text-white shadow-md scale-105'
+                              : 'bg-white border-gray-300 text-gray-700 hover:border-gray-400 hover:shadow-sm cursor-pointer'
+                        }`}
+                      >
+                        <div className="flex flex-col items-center gap-1">
+                          <span>{label}</span>
+                          {paid && (
+                            <CheckCircle2 size={14} className="text-green-600" />
+                          )}
+                          {isSelected && !paid && (
+                            <div className="w-2 h-2 bg-white rounded-full"></div>
+                          )}
+                        </div>
+                      </button>
+                    );
+                  })}
+                </div>
+              </div>
+
+              {/* Legend */}
+              <div className="flex flex-wrap gap-3 text-xs">
+                <div className="flex items-center gap-1">
+                  <div className="w-6 h-6 bg-green-100 border-2 border-green-400 rounded-md flex items-center justify-center">
+                    <CheckCircle2 size={12} className="text-green-600" />
+                  </div>
+                  <span className="text-gray-600">Paid</span>
+                </div>
+                <div className="flex items-center gap-1">
+                  <div className="w-6 h-6 bg-blue-500 border-2 border-blue-600 rounded-md"></div>
+                  <span className="text-gray-600">Selected</span>
+                </div>
+                <div className="flex items-center gap-1">
+                  <div className="w-6 h-6 bg-white border-2 border-gray-300 rounded-md"></div>
+                  <span className="text-gray-600">Available</span>
+                </div>
+              </div>
+
+              {/* Selection Summary */}
+              {selectedMonths.length > 0 && (
+                <div className="bg-blue-50 border border-blue-200 rounded-lg p-3">
+                  <p className="text-sm font-medium text-blue-900">
+                    {selectedMonths.length} month{selectedMonths.length > 1 ? 's' : ''} selected
+                  </p>
+                  <p className="text-lg font-bold text-blue-700 mt-1">
+                    Total: ₹{calculateTotalAmount().toLocaleString('en-IN')}
+                  </p>
+                  <p className="text-xs text-blue-600 mt-1">
+                    {selectedMonths
+                      .sort((a, b) => a.month - b.month)
+                      .map(m => {
+                        const monthName = new Date(m.year, m.month, 1).toLocaleDateString('en-US', { month: 'short' });
+                        return monthName;
+                      })
+                      .join(', ')}
+                  </p>
+                </div>
+              )}
             </div>
 
             <div className="space-y-2 md:col-span-2">

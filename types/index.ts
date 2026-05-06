@@ -5,6 +5,20 @@ export interface Admin {
   createdAt?: Date;
 }
 
+export interface FeeRecord {
+  _id?: string;
+  studentId: string;
+  month: number; // 0-11 (January = 0)
+  year: number;
+  amount: number;
+  status: 'paid' | 'pending' | 'overdue';
+  paymentId?: string; // Reference to payment that covered this fee
+  dueDate: Date;
+  paidDate?: Date;
+  createdAt?: Date;
+  updatedAt?: Date;
+}
+
 export interface Student {
   _id?: string;
   name: string;
@@ -18,6 +32,8 @@ export interface Student {
   aadharNumber?: string;
   photoUrl?: string;
   admittedBy?: string;
+  paidMonths?: { month: number; year: number; paidDate: Date }[]; // Track paid months
+  totalFeesCollected?: number; // Total amount collected
   createdAt?: Date;
   updatedAt?: Date;
 }
@@ -29,6 +45,7 @@ export interface Payment {
   paymentDate: Date;
   paymentMethod: 'cash' | 'upi' | 'check' | 'online';
   notes?: string;
+  monthsCovered?: { month: number; year: number }[]; // Months this payment covers
   createdAt?: Date;
 }
 
@@ -62,6 +79,7 @@ export interface DashboardSummary {
   totalCollection: number;
   monthlyCollection: number;
   availableSeats: number;
+  totalSeats: number;
 }
 
 export interface AuthResponse {

@@ -13,6 +13,7 @@ const demoSummary: DashboardSummary = {
   totalCollection: 156800,
   monthlyCollection: 12400,
   availableSeats: 18,
+  totalSeats: 50,
 };
 
 // GET - Dashboard summary
@@ -75,9 +76,20 @@ export async function GET(request: NextRequest) {
 
       const monthlyCollection = monthlyPayments.reduce((sum, p: any) => sum + p.amount, 0);
 
-      // Available seats
+      // Available seats - calculate based on which students are assigned to seats
       const seats = await seatsCollection.find({}).toArray();
-      const availableSeats = seats.filter((s: any) => s.isAvailable).length;
+      const studentsWithSeats = await studentsCollection
+        .find({ seatNumber: { $type: 'number' } })
+        .toArray();
+
+      // Create a map of occupied seat numbers
+      const occupiedSeats = new Set(
+        studentsWithSeats.map((s: any) => s.seatNumber)
+      );
+
+      // Count available seats (those not occupied by any student)
+      const availableSeats = seats.filter((s: any) => !occupiedSeats.has(s.seatNumber)).length;
+      const totalSeats = seats.length;
 
       const summary: DashboardSummary = {
         totalStudents,
@@ -88,6 +100,7 @@ export async function GET(request: NextRequest) {
         totalCollection,
         monthlyCollection,
         availableSeats,
+        totalSeats,
       };
 
       return NextResponse.json(

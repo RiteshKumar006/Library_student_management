@@ -1,7 +1,7 @@
 import { NextRequest, NextResponse } from 'next/server';
 import { getDatabase } from '@/lib/db';
 import { getTokenFromRequest, verifyToken } from '@/lib/auth';
-import { Payment, ApiResponse } from '@/types';
+import { Payment, FeeRecord, ApiResponse } from '@/types';
 import { ObjectId } from 'mongodb';
 
 // POST - Record payment
@@ -16,7 +16,7 @@ export async function POST(request: NextRequest) {
     }
 
     const body = await request.json();
-    const { studentId, amount, paymentDate, paymentMethod, notes } = body;
+    const { studentId, amount, paymentDate, paymentMethod, notes, monthsCovered } = body;
 
     if (!studentId || !amount || !paymentDate || !paymentMethod) {
       return NextResponse.json(
@@ -28,6 +28,7 @@ export async function POST(request: NextRequest) {
     const db = await getDatabase();
     const paymentsCollection = db.collection('payments');
     const studentsCollection = db.collection('students');
+    const feeRecordsCollection = db.collection('feeRecords');
 
     // Verify student exists
     const student = await studentsCollection.findOne({
@@ -47,24 +48,128 @@ export async function POST(request: NextRequest) {
       paymentDate: new Date(paymentDate),
       paymentMethod,
       notes: notes || '',
+      monthsCovered: monthsCovered || [],
       createdAt: new Date(),
     };
 
     const result = await paymentsCollection.insertOne(newPayment);
+    const paymentId = result.insertedId.toString();
 
-    // Update student's next due date (add one month from today)
-    const nextDueDate = new Date();
-    nextDueDate.setMonth(nextDueDate.getMonth() + 1);
+    // Create or update fee records for covered months
+    if (monthsCovered && monthsCovered.length > 0) {
+      for (const { month, year } of monthsCovered) {
+        const dueDate = new Date(year, month + 1, 0); // Last day of the month
 
-    await studentsCollection.updateOne(
-      { _id: new ObjectId(studentId) },
-      {
-        $set: {
-          nextDueDate,
-          updatedAt: new Date(),
-        },
+        // Check if fee record already exists
+        const existingRecord = await feeRecordsCollection.findOne({
+          studentId,
+          month,
+          year,
+        });
+
+        if (existingRecord) {
+          // Update existing record
+          await feeRecordsCollection.updateOne(
+            { _id: existingRecord._id },
+            {
+              $set: {
+                status: 'paid',
+                paymentId,
+                paidDate: new Date(paymentDate),
+                updatedAt: new Date(),
+              },
+            }
+          );
+        } else {
+          // Create new fee record
+          const feeRecord: FeeRecord = {
+            studentId,
+            month,
+            year,
+            amount: student.monthlyFee,
+            status: 'paid',
+            paymentId,
+            dueDate,
+            paidDate: new Date(paymentDate),
+            createdAt: new Date(),
+            updatedAt: new Date(),
+          };
+          await feeRecordsCollection.insertOne(feeRecord);
+        }
       }
-    );
+
+      // Update student's next due date to the month after the last paid month
+      const lastPaidMonth = monthsCovered.reduce((latest, current) => {
+        const currentDate = new Date(current.year, current.month);
+        const latestDate = new Date(latest.year, latest.month);
+        return currentDate > latestDate ? current : latest;
+      });
+
+      const nextDueDate = new Date(lastPaidMonth.year, lastPaidMonth.month + 1, 1);
+      const paymentDateObj = new Date(paymentDate);
+
+      // Prepare paid months array to add to student record
+      const paidMonthsToAdd = monthsCovered.map((m: any) => ({
+        month: m.month,
+        year: m.year,
+        paidDate: paymentDateObj,
+      }));
+
+      // Get current student to merge paid months
+      const currentStudent = await studentsCollection.findOne(
+        { _id: new ObjectId(studentId) },
+        { projection: { paidMonths: 1, totalFeesCollected: 1 } }
+      );
+
+      const existingPaidMonths = currentStudent?.paidMonths || [];
+      const existingTotal = currentStudent?.totalFeesCollected || 0;
+
+      // Merge paid months (avoid duplicates)
+      const mergedPaidMonths = [...existingPaidMonths];
+      for (const newMonth of paidMonthsToAdd) {
+        const exists = mergedPaidMonths.some(
+          (m: any) => m.month === newMonth.month && m.year === newMonth.year
+        );
+        if (!exists) {
+          mergedPaidMonths.push(newMonth);
+        }
+      }
+
+      // Update student record with paid months and total fees collected
+      await studentsCollection.updateOne(
+        { _id: new ObjectId(studentId) },
+        {
+          $set: {
+            nextDueDate,
+            paidMonths: mergedPaidMonths,
+            totalFeesCollected: existingTotal + parseFloat(amount),
+            updatedAt: new Date(),
+          },
+        }
+      );
+    } else {
+      // Legacy behavior: add one month to next due date
+      const nextDueDate = new Date();
+      nextDueDate.setMonth(nextDueDate.getMonth() + 1);
+
+      const currentStudent = await studentsCollection.findOne(
+        { _id: new ObjectId(studentId) },
+        { projection: { totalFeesCollected: 1 } }
+      );
+
+      const existingTotal = currentStudent?.totalFeesCollected || 0;
+
+      await studentsCollection.updateOne(
+        { _id: new ObjectId(studentId) },
+        {
+          $set: {
+            nextDueDate,
+            totalFeesCollected: existingTotal + parseFloat(amount),
+            updatedAt: new Date(),
+          },
+        }
+      );
+    }
 
     return NextResponse.json(
       { success: true, data: { _id: result.insertedId, ...newPayment }, message: 'Payment recorded successfully' } as ApiResponse,

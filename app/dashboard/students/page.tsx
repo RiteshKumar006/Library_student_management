@@ -10,7 +10,7 @@ import { Input } from '@/components/ui/input';
 import { Card, CardContent, CardHeader, CardTitle } from '@/components/ui/card';
 import { Alert, AlertDescription } from '@/components/ui/alert';
 import { Dialog, DialogContent, DialogHeader, DialogTitle } from '@/components/ui/dialog';
-import { AlertCircle, CalendarDays, CheckCircle2, CreditCard, Phone, Plus, Search, UserRound } from 'lucide-react';
+import { AlertCircle, CalendarDays, CheckCircle2, CreditCard, Phone, Plus, Search, UserRound, Users, TrendingUp, AlertTriangle, Clock } from 'lucide-react';
 
 export default function StudentsPage() {
   const [students, setStudents] = useState<Student[]>([]);
@@ -182,6 +182,7 @@ export default function StudentsPage() {
           paymentDate: today.toISOString().split('T')[0],
           paymentMethod: 'cash',
           notes: 'Current month fee marked paid',
+          monthsCovered: [{ month: today.getMonth(), year: today.getFullYear() }],
         }),
       });
 
@@ -226,6 +227,11 @@ export default function StudentsPage() {
     }
   };
 
+  // Calculate statistics
+  const activeStudents = students.filter(s => s.status === 'active').length;
+  const overdueStudents = students.filter(s => s.status === 'overdue').length;
+  const totalFeesCollected = students.reduce((sum, s) => sum + (s.totalFeesCollected || 0), 0);
+
   if (editingStudent) {
     return (
       <div className="space-y-6">
@@ -259,6 +265,34 @@ export default function StudentsPage() {
           <Plus size={18} />
           Add Student
         </Button>
+      </div>
+
+      {/* Summary Statistics */}
+      <div className="grid grid-cols-1 md:grid-cols-4 gap-4">
+        <SummaryCard 
+          title="Total Students" 
+          value={students.length} 
+          icon={<Users className="w-5 h-5" />}
+          color="blue"
+        />
+        <SummaryCard 
+          title="Active Students" 
+          value={activeStudents} 
+          icon={<CheckCircle2 className="w-5 h-5" />}
+          color="green"
+        />
+        <SummaryCard 
+          title="Overdue Students" 
+          value={overdueStudents} 
+          icon={<AlertTriangle className="w-5 h-5" />}
+          color="red"
+        />
+        <SummaryCard 
+          title="Total Collected" 
+          value={`₹${totalFeesCollected.toLocaleString('en-IN')}`} 
+          icon={<CreditCard className="w-5 h-5" />}
+          color="purple"
+        />
       </div>
 
       <Dialog open={showForm} onOpenChange={setShowForm}>
@@ -304,12 +338,10 @@ export default function StudentsPage() {
         </Alert>
       )}
 
+      {/* Search & Filter */}
       <Card>
-        <CardHeader>
-          <CardTitle>Search & Filter</CardTitle>
-        </CardHeader>
-        <CardContent>
-          <div className="flex gap-4">
+        <CardContent className="pt-6">
+          <div className="flex gap-3 flex-col sm:flex-row">
             <div className="flex-1 relative">
               <Search className="absolute left-3 top-3 text-gray-400" size={18} />
               <Input
@@ -322,9 +354,9 @@ export default function StudentsPage() {
             <select
               value={statusFilter}
               onChange={(e) => setStatusFilter(e.target.value)}
-              className="px-4 py-2 border border-gray-300 rounded-md shadow-sm focus:outline-none focus:ring-blue-500 focus:border-blue-500"
+              className="px-4 py-2 border border-gray-300 rounded-md shadow-sm focus:outline-none focus:ring-blue-500 focus:border-blue-500 bg-white min-w-[150px]"
             >
-              <option value="all">All Status</option>
+              <option value="all">All Students</option>
               <option value="active">Active</option>
               <option value="overdue">Overdue</option>
             </select>
@@ -332,16 +364,19 @@ export default function StudentsPage() {
         </CardContent>
       </Card>
 
+      {/* Students Table */}
       <Card>
-        <CardHeader>
-          <CardTitle>
-            All Students
-            <span className="text-sm font-normal text-gray-600 ml-2">
-              ({students.length} total)
-            </span>
-          </CardTitle>
+        <CardHeader className="border-b pb-4">
+          <div className="flex items-center justify-between">
+            <div>
+              <CardTitle>Student Directory</CardTitle>
+              <p className="text-sm text-gray-600 mt-1">
+                {students.length > 0 ? `${students.length} student${students.length !== 1 ? 's' : ''} found` : 'No students'}
+              </p>
+            </div>
+          </div>
         </CardHeader>
-        <CardContent>
+        <CardContent className="pt-0">
           <StudentTable
             students={students}
             onView={handleViewStudent}
@@ -352,6 +387,46 @@ export default function StudentsPage() {
         </CardContent>
       </Card>
     </div>
+  );
+}
+
+function SummaryCard({ 
+  title, 
+  value, 
+  icon, 
+  color 
+}: { 
+  title: string; 
+  value: string | number; 
+  icon: ReactNode;
+  color: 'blue' | 'green' | 'red' | 'purple';
+}) {
+  const colorClasses = {
+    blue: 'border-l-blue-600 bg-blue-50',
+    green: 'border-l-green-600 bg-green-50',
+    red: 'border-l-red-600 bg-red-50',
+    purple: 'border-l-purple-600 bg-purple-50',
+  };
+
+  const iconColorClasses = {
+    blue: 'text-blue-600 bg-blue-100',
+    green: 'text-green-600 bg-green-100',
+    red: 'text-red-600 bg-red-100',
+    purple: 'text-purple-600 bg-purple-100',
+  };
+
+  return (
+    <Card className={`border-l-4 ${colorClasses[color]}`}>
+      <CardContent className="flex items-center gap-4 pt-6">
+        <div className={`p-3 rounded-lg ${iconColorClasses[color]}`}>
+          {icon}
+        </div>
+        <div>
+          <p className="text-sm font-medium text-gray-600">{title}</p>
+          <p className="text-2xl font-bold text-gray-900 mt-1">{value}</p>
+        </div>
+      </CardContent>
+    </Card>
   );
 }
 
@@ -379,18 +454,23 @@ function StudentDetails({
         ? 'bg-green-100 text-green-700'
         : 'bg-gray-100 text-gray-700';
 
+  // Calculate days until due
+  const daysUntilDue = calculateDaysUntilDue(student.nextDueDate);
+  const daysClass = daysUntilDue < 0 ? 'text-red-600' : daysUntilDue <= 3 ? 'text-yellow-600' : 'text-green-600';
+
   return (
     <div className="space-y-6">
       <DialogHeader>
         <DialogTitle>Student Details</DialogTitle>
       </DialogHeader>
 
-      <div className="flex flex-col gap-5 rounded-lg border p-4 sm:flex-row sm:items-center">
-        <div className="flex h-24 w-24 shrink-0 items-center justify-center overflow-hidden rounded-md border bg-gray-50">
+      {/* Header Card */}
+      <div className="flex flex-col gap-5 rounded-lg border p-4 sm:flex-row sm:items-center bg-gradient-to-r from-blue-50 to-indigo-50">
+        <div className="flex h-24 w-24 shrink-0 items-center justify-center overflow-hidden rounded-lg border-2 border-blue-200 bg-white shadow-sm">
           {student.photoUrl ? (
             <img src={student.photoUrl} alt={student.name} className="h-full w-full object-cover" />
           ) : (
-            <UserRound className="h-10 w-10 text-gray-400" />
+            <UserRound className="h-10 w-10 text-gray-300" />
           )}
         </div>
         <div className="min-w-0 flex-1">
@@ -400,13 +480,18 @@ function StudentDetails({
               {student.status}
             </span>
           </div>
-          <div className="mt-2 flex flex-wrap gap-x-5 gap-y-2 text-sm text-gray-600">
-            <span className="inline-flex items-center gap-2">
-              <Phone size={16} />
+          <div className="mt-3 flex flex-wrap gap-x-5 gap-y-2 text-sm text-gray-700">
+            <span className="inline-flex items-center gap-2 bg-white px-3 py-1 rounded-md">
+              <Phone size={16} className="text-blue-600" />
               {student.phone}
             </span>
-            <span>Seat {student.seatNumber}</span>
-            <span>Admitted by {student.admittedBy || 'Not added'}</span>
+            <span className="inline-flex items-center gap-2 bg-white px-3 py-1 rounded-md">
+              <UserRound size={16} className="text-blue-600" />
+              Seat {student.seatNumber}
+            </span>
+            <span className="inline-flex items-center gap-2 bg-white px-3 py-1 rounded-md text-xs">
+              Admitted by <span className="font-medium">{student.admittedBy || 'N/A'}</span>
+            </span>
           </div>
         </div>
         <div className="flex flex-col gap-2 sm:flex-row">
@@ -420,8 +505,8 @@ function StudentDetails({
             {isMarkingPaid
               ? 'Marking...'
               : hasCurrentMonthPayment
-                ? 'Current Month Paid'
-                : 'Mark Current Month Paid'}
+                ? 'Paid'
+                : 'Mark Paid'}
           </Button>
           <Button type="button" variant="outline" onClick={onEdit}>
             Edit
@@ -429,58 +514,109 @@ function StudentDetails({
         </div>
       </div>
 
-      <div className="grid grid-cols-1 gap-4 md:grid-cols-3">
-        <DetailCard title="Monthly Fee" value={`Rs. ${student.monthlyFee}`} icon={<CreditCard size={18} />} />
-        <DetailCard
+      {/* Key Metrics */}
+      <div className="grid grid-cols-1 gap-4 md:grid-cols-4">
+        <MetricCard 
+          title="Monthly Fee" 
+          value={`₹${student.monthlyFee}`} 
+          icon={<CreditCard size={18} />}
+          color="blue"
+        />
+        <MetricCard
           title="Next Due Date"
           value={new Date(student.nextDueDate).toLocaleDateString('en-IN')}
+          subtitle={`${Math.abs(daysUntilDue)} day${Math.abs(daysUntilDue) !== 1 ? 's' : ''} ${daysUntilDue < 0 ? 'overdue' : 'left'}`}
           icon={<CalendarDays size={18} />}
+          color={daysUntilDue < 0 ? 'red' : daysUntilDue <= 3 ? 'yellow' : 'green'}
         />
-        <DetailCard title="Total Paid" value={`Rs. ${totalPaid}`} icon={<CreditCard size={18} />} />
+        <MetricCard
+          title="Total Paid"
+          value={`₹${totalPaid.toLocaleString('en-IN')}`}
+          subtitle={`${payments.length} payment${payments.length !== 1 ? 's' : ''}`}
+          icon={<CreditCard size={18} />}
+          color="green"
+        />
+        <MetricCard
+          title="Fees Collected"
+          value={`₹${(student.totalFeesCollected || 0).toLocaleString('en-IN')}`}
+          subtitle={`${student.paidMonths?.length || 0} month${(student.paidMonths?.length || 0) !== 1 ? 's' : ''} covered`}
+          icon={<TrendingUp size={18} />}
+          color="purple"
+        />
       </div>
 
-      <Card>
-        <CardHeader>
-          <CardTitle className="text-base">All Details</CardTitle>
-        </CardHeader>
-        <CardContent>
-          <div className="grid grid-cols-1 gap-4 text-sm md:grid-cols-2">
-            <InfoRow label="Student Name" value={student.name} />
-            <InfoRow label="Phone Number" value={student.phone} />
-            <InfoRow label="Parent Phone" value={student.parentPhone || 'Not added'} />
-            <InfoRow label="Aadhaar Number" value={student.aadharNumber || 'Not added'} />
-            <InfoRow label="Seat Number" value={String(student.seatNumber)} />
-            <InfoRow label="Joining Date" value={new Date(student.joiningDate).toLocaleDateString('en-IN')} />
-            <InfoRow label="Next Due Date" value={new Date(student.nextDueDate).toLocaleDateString('en-IN')} />
-            <InfoRow label="Monthly Fee" value={`Rs. ${student.monthlyFee}`} />
-            <InfoRow label="Admitted By" value={student.admittedBy || 'Not added'} />
-            <InfoRow label="Created At" value={student.createdAt ? new Date(student.createdAt).toLocaleString('en-IN') : 'Not available'} />
-            <InfoRow label="Updated At" value={student.updatedAt ? new Date(student.updatedAt).toLocaleString('en-IN') : 'Not available'} />
-          </div>
-        </CardContent>
-      </Card>
+      {/* Details & History Tabs */}
+      <div className="grid grid-cols-1 lg:grid-cols-2 gap-6">
+        {/* Student Information */}
+        <Card>
+          <CardHeader>
+            <CardTitle className="text-base">Student Information</CardTitle>
+          </CardHeader>
+          <CardContent>
+            <div className="space-y-3">
+              <InfoRow label="Full Name" value={student.name} />
+              <InfoRow label="Phone" value={student.phone} />
+              <InfoRow label="Parent Phone" value={student.parentPhone || 'Not added'} />
+              <InfoRow label="Aadhaar" value={student.aadharNumber || 'Not added'} />
+              <InfoRow label="Joining Date" value={new Date(student.joiningDate).toLocaleDateString('en-IN')} />
+              <InfoRow label="Monthly Fee" value={`₹${student.monthlyFee}`} />
+            </div>
+          </CardContent>
+        </Card>
 
+        {/* Fee Summary */}
+        <Card>
+          <CardHeader>
+            <CardTitle className="text-base">Fee Summary</CardTitle>
+          </CardHeader>
+          <CardContent>
+            <div className="space-y-4">
+              <div className="p-4 bg-gradient-to-r from-green-50 to-emerald-50 rounded-lg border border-green-200">
+                <p className="text-sm text-gray-600">Total Collected</p>
+                <p className="text-2xl font-bold text-green-700 mt-1">₹{(student.totalFeesCollected || 0).toLocaleString('en-IN')}</p>
+              </div>
+              <div className="p-4 bg-gradient-to-r from-blue-50 to-indigo-50 rounded-lg border border-blue-200">
+                <p className="text-sm text-gray-600">Months Covered</p>
+                <p className="text-2xl font-bold text-blue-700 mt-1">{student.paidMonths?.length || 0}</p>
+              </div>
+              <div className="p-4 bg-gradient-to-r from-purple-50 to-pink-50 rounded-lg border border-purple-200">
+                <p className="text-sm text-gray-600">Payment Transactions</p>
+                <p className="text-2xl font-bold text-purple-700 mt-1">{payments.length}</p>
+              </div>
+            </div>
+          </CardContent>
+        </Card>
+      </div>
+
+      {/* Payment History */}
       <Card>
         <CardHeader>
-          <CardTitle className="text-base">Fee History</CardTitle>
+          <CardTitle className="text-base">Payment History</CardTitle>
         </CardHeader>
         <CardContent>
           {isPaymentHistoryLoading ? (
-            <p className="py-6 text-center text-gray-600">Loading fee history...</p>
+            <div className="py-6 text-center">
+              <div className="w-8 h-8 border-3 border-blue-200 border-t-blue-600 rounded-full animate-spin mx-auto mb-2"></div>
+              <p className="text-gray-600">Loading payments...</p>
+            </div>
           ) : payments.length === 0 ? (
             <p className="py-6 text-center text-gray-600">No payments recorded</p>
           ) : (
             <div className="space-y-3">
               {payments.map((payment) => (
-                <div key={payment._id} className="flex flex-col gap-2 rounded-lg border p-4 sm:flex-row sm:items-center sm:justify-between">
-                  <div>
-                    <p className="font-semibold text-gray-900">Rs. {payment.amount}</p>
-                    <p className="text-sm text-gray-600">
-                      {new Date(payment.paymentDate).toLocaleDateString('en-IN')}
-                    </p>
-                    <p className="text-xs capitalize text-gray-500">{payment.paymentMethod}</p>
+                <div key={payment._id} className="flex flex-col gap-2 rounded-lg border p-4 sm:flex-row sm:items-center sm:justify-between hover:bg-gray-50 transition-colors">
+                  <div className="flex-1">
+                    <div className="flex items-center gap-2">
+                      <div className="w-10 h-10 rounded-full bg-green-100 flex items-center justify-center">
+                        <CheckCircle2 size={18} className="text-green-600" />
+                      </div>
+                      <div>
+                        <p className="font-semibold text-gray-900">₹{payment.amount.toLocaleString('en-IN')}</p>
+                        <p className="text-xs text-gray-600">{new Date(payment.paymentDate).toLocaleDateString('en-IN')} • {payment.paymentMethod.toUpperCase()}</p>
+                      </div>
+                    </div>
                   </div>
-                  {payment.notes && <p className="text-sm text-gray-600 sm:max-w-xs sm:text-right">{payment.notes}</p>}
+                  {payment.notes && <p className="text-sm text-gray-600 sm:max-w-xs sm:text-right italic">{payment.notes}</p>}
                 </div>
               ))}
             </div>
@@ -491,14 +627,37 @@ function StudentDetails({
   );
 }
 
-function DetailCard({ title, value, icon }: { title: string; value: string; icon: ReactNode }) {
+function MetricCard({ 
+  title, 
+  value, 
+  subtitle,
+  icon, 
+  color 
+}: { 
+  title: string; 
+  value: string;
+  subtitle?: string;
+  icon: ReactNode;
+  color: 'blue' | 'green' | 'red' | 'yellow' | 'purple';
+}) {
+  const colorClasses = {
+    blue: 'bg-blue-50 text-blue-600 border-blue-200',
+    green: 'bg-green-50 text-green-600 border-green-200',
+    red: 'bg-red-50 text-red-600 border-red-200',
+    yellow: 'bg-yellow-50 text-yellow-600 border-yellow-200',
+    purple: 'bg-purple-50 text-purple-600 border-purple-200',
+  };
+
   return (
-    <Card>
+    <Card className={`border ${colorClasses[color]}`}>
       <CardContent className="flex items-center gap-3 pt-6">
-        <div className="rounded-md bg-blue-50 p-2 text-blue-600">{icon}</div>
-        <div>
+        <div className={`p-2 rounded-lg ${colorClasses[color]}`}>
+          {icon}
+        </div>
+        <div className="flex-1">
           <p className="text-xs font-medium text-gray-600">{title}</p>
-          <p className="text-lg font-bold text-gray-900">{value}</p>
+          <p className="text-lg font-bold text-gray-900 mt-1">{value}</p>
+          {subtitle && <p className="text-xs text-gray-600 mt-0.5">{subtitle}</p>}
         </div>
       </CardContent>
     </Card>
@@ -522,4 +681,14 @@ function isCurrentMonth(date: Date | string) {
     paymentDate.getFullYear() === today.getFullYear() &&
     paymentDate.getMonth() === today.getMonth()
   );
+}
+
+function calculateDaysUntilDue(dueDate: Date | string) {
+  const today = new Date();
+  today.setHours(0, 0, 0, 0);
+
+  const due = new Date(dueDate);
+  due.setHours(0, 0, 0, 0);
+
+  return Math.ceil((due.getTime() - today.getTime()) / (1000 * 60 * 60 * 24));
 }

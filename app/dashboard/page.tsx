@@ -183,21 +183,21 @@ export default function DashboardPage() {
                 <div className="flex justify-between items-center mb-2">
                   <span className="text-gray-600">Occupied</span>
                   <span className="font-semibold">
-                    {50 - (summary?.availableSeats || 0)}/50
+                    {(summary?.totalSeats || 0) - (summary?.availableSeats || 0)}/{summary?.totalSeats || 0}
                   </span>
                 </div>
                 <div className="w-full bg-gray-200 rounded-full h-2">
                   <div
                     className="bg-blue-600 h-2 rounded-full transition-all"
                     style={{
-                      width: `${((50 - (summary?.availableSeats || 0)) / 50) * 100}%`,
+                      width: `${((((summary?.totalSeats || 0) - (summary?.availableSeats || 0)) / (summary?.totalSeats || 1)) * 100)}%`,
                     }}
                   ></div>
                 </div>
               </div>
               <div className="pt-4 text-center">
                 <p className="text-sm text-gray-600">
-                  {`${Math.round((((50 - (summary?.availableSeats || 0)) / 50) * 100))}% utilization`}
+                  {`${Math.round(((((summary?.totalSeats || 0) - (summary?.availableSeats || 0)) / (summary?.totalSeats || 1)) * 100))}% utilization`}
                 </p>
               </div>
             </div>

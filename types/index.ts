@@ -2,7 +2,12 @@ export interface Admin {
   _id?: string;
   email: string;
   password: string;
+  name?: string;
+  phone?: string;
+  libraryName?: string;
+  address?: string;
   createdAt?: Date;
+  updatedAt?: Date;
 }
 
 export interface FeeRecord {
@@ -26,6 +31,7 @@ export interface Student {
   seatNumber: number;
   joiningDate: Date;
   monthlyFee: number;
+  feePaidTillDate?: Date;
   nextDueDate: Date;
   status: 'active' | 'inactive' | 'overdue';
   parentPhone?: string;

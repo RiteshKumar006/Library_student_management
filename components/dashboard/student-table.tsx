@@ -48,7 +48,7 @@ export function StudentTable({ students, onView, onEdit, onDelete, isLoading }: 
             <th className="px-6 py-4 text-left font-semibold text-gray-900">Student</th>
             <th className="px-6 py-4 text-left font-semibold text-gray-900">Phone</th>
             <th className="px-6 py-4 text-left font-semibold text-gray-900">Seat</th>
-            <th className="px-6 py-4 text-center font-semibold text-gray-900">Due Date</th>
+            <th className="px-6 py-4 text-center font-semibold text-gray-900">Paid Till</th>
             <th className="px-6 py-4 text-center font-semibold text-gray-900">Collected</th>
             <th className="px-6 py-4 text-center font-semibold text-gray-900">Status</th>
             <th className="px-6 py-4 text-right font-semibold text-gray-900">Actions</th>
@@ -56,6 +56,9 @@ export function StudentTable({ students, onView, onEdit, onDelete, isLoading }: 
         </thead>
         <tbody>
           {students.map((student) => {
+            const paidTillDate =
+              student.feePaidTillDate ||
+              new Date(new Date(student.nextDueDate).getTime() - 24 * 60 * 60 * 1000);
             const daysUntilDue = getDaysUntilDue(student.nextDueDate);
             const statusColor = 
               student.status === 'overdue'
@@ -88,7 +91,7 @@ export function StudentTable({ students, onView, onEdit, onDelete, isLoading }: 
                 <td className="px-6 py-4 text-gray-700 font-medium">{student.seatNumber || '-'}</td>
                 <td className="px-6 py-4 text-center">
                   <div className={dueDateColor}>
-                    {new Date(student.nextDueDate).toLocaleDateString('en-IN')}
+                    {new Date(paidTillDate).toLocaleDateString('en-IN')}
                     <p className="text-xs text-gray-600 mt-1">
                       {daysUntilDue < 0 
                         ? `${Math.abs(daysUntilDue)}d overdue`

@@ -309,6 +309,9 @@ function SummaryCard({
 function FeeStudentCard({ student, onClick }: { student: Student; onClick: () => void }) {
   const status = getFeeStatus(student);
   const daysUntilDue = getDaysUntilDue(student.nextDueDate);
+  const paidTillDate =
+    student.feePaidTillDate ||
+    new Date(new Date(student.nextDueDate).getTime() - 24 * 60 * 60 * 1000);
   const isOverdue = status === 'overdue';
   const isPending = status === 'pending';
 
@@ -362,9 +365,9 @@ function FeeStudentCard({ student, onClick }: { student: Student; onClick: () =>
               </p>
             </div>
             <div>
-              <p className="text-xs text-gray-600 mb-2">Next Due</p>
+              <p className="text-xs text-gray-600 mb-2">Paid Till</p>
               <p className="font-semibold text-gray-900">
-                {new Date(student.nextDueDate).toLocaleDateString('en-IN')}
+                {new Date(paidTillDate).toLocaleDateString('en-IN')}
               </p>
             </div>
           </div>

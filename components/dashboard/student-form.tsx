@@ -25,6 +25,9 @@ export function StudentForm({ student, onSubmit, onCancel, isLoading }: StudentF
       ? new Date(student.joiningDate).toISOString().split('T')[0]
       : new Date().toISOString().split('T')[0],
     monthlyFee: student?.monthlyFee || '',
+    feePaidTillDate: student?.feePaidTillDate
+      ? new Date(student.feePaidTillDate).toISOString().split('T')[0]
+      : '',
     parentPhone: student?.parentPhone || '',
     aadharNumber: student?.aadharNumber || '',
     photoUrl: student?.photoUrl || '',
@@ -299,7 +302,7 @@ export function StudentForm({ student, onSubmit, onCancel, isLoading }: StudentF
           </FormSection>
 
           {/* Fee Information */}
-          <FormSection title="Fee Information" icon={<DollarSign size={18} />} description="Monthly fee details">
+          <FormSection title="Fee Information" icon={<DollarSign size={18} />} description="Monthly fee and paid-through date">
             <div className="grid grid-cols-1 md:grid-cols-2 gap-4">
               <FormField
                 label="Monthly Fee (₹)"
@@ -312,6 +315,15 @@ export function StudentForm({ student, onSubmit, onCancel, isLoading }: StudentF
                 disabled={isLoading}
                 required
                 icon={<DollarSign size={16} />}
+              />
+              <FormField
+                label="Fees Paid Till Date"
+                name="feePaidTillDate"
+                type="date"
+                value={formData.feePaidTillDate}
+                onChange={handleChange}
+                disabled={isLoading}
+                icon={<Calendar size={16} />}
               />
               <FormField
                 label="Admitted By"

@@ -87,6 +87,76 @@ export async function POST(request: NextRequest) {
   }
 }
 
+// PUT - Update library expense
+export async function PUT(request: NextRequest) {
+  try {
+    const token = getTokenFromRequest(request);
+    if (!token || !verifyToken(token)) {
+      return NextResponse.json(
+        { success: false, message: 'Unauthorized' } as ApiResponse,
+        { status: 401 }
+      );
+    }
+
+    const { searchParams } = new URL(request.url);
+    const id = searchParams.get('id');
+
+    if (!id || !ObjectId.isValid(id)) {
+      return NextResponse.json(
+        { success: false, message: 'Invalid expense ID' } as ApiResponse,
+        { status: 400 }
+      );
+    }
+
+    const body = await request.json();
+    const { title, amount, expenseDate, category, paymentMethod, notes } = body;
+
+    if (!title || !amount || !expenseDate || !category || !paymentMethod) {
+      return NextResponse.json(
+        { success: false, message: 'Missing required fields' } as ApiResponse,
+        { status: 400 }
+      );
+    }
+
+    const updateData: Partial<Expense> = {
+      title,
+      amount: parseFloat(amount),
+      expenseDate: new Date(expenseDate),
+      category,
+      paymentMethod,
+      notes: notes || '',
+      updatedAt: new Date(),
+    };
+
+    const db = await getDatabase();
+    const result = await db.collection('expenses').updateOne(
+      { _id: new ObjectId(id) },
+      { $set: updateData }
+    );
+
+    if (result.matchedCount === 0) {
+      return NextResponse.json(
+        { success: false, message: 'Expense not found' } as ApiResponse,
+        { status: 404 }
+      );
+    }
+
+    // Fetch the updated expense
+    const updatedExpense = await db.collection('expenses').findOne({ _id: new ObjectId(id) });
+
+    return NextResponse.json(
+      { success: true, data: updatedExpense, message: 'Expense updated successfully' } as ApiResponse,
+      { status: 200 }
+    );
+  } catch (error) {
+    console.error('Error updating expense:', error);
+    return NextResponse.json(
+      { success: false, message: 'Internal server error' } as ApiResponse,
+      { status: 500 }
+    );
+  }
+}
+
 // DELETE - Remove library expense
 export async function DELETE(request: NextRequest) {
   try {

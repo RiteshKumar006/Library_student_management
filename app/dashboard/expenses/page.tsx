@@ -8,8 +8,8 @@ import { Card, CardContent, CardHeader, CardTitle } from '@/components/ui/card';
 import { Input } from '@/components/ui/input';
 import { Textarea } from '@/components/ui/textarea';
 import { Badge } from '@/components/ui/badge';
-import { PieChart } from 'lucide-react';
-import { AlertCircle, CalendarDays, IndianRupee, Plus, ReceiptText, Trash2, WalletCards, Search, TrendingDown } from 'lucide-react';
+import { Dialog, DialogContent, DialogDescription, DialogFooter, DialogHeader, DialogTitle } from '@/components/ui/dialog';
+import { AlertCircle, CalendarDays, IndianRupee, Plus, ReceiptText, Trash2, WalletCards, Search, TrendingDown, Edit, X } from 'lucide-react';
 import { ResponsiveContainer, AreaChart, Area, XAxis, YAxis, CartesianGrid, Tooltip } from 'recharts';
 
 type ExpenseCategory = Expense['category'];
@@ -50,6 +50,12 @@ export default function ExpensesPage() {
   const [filter, setFilter] = useState<ExpenseFilter>('all');
   const [searchQuery, setSearchQuery] = useState('');
   const [viewMode, setViewMode] = useState<'grid' | 'list'>('grid');
+  
+  // Edit modal state
+  const [isEditModalOpen, setIsEditModalOpen] = useState(false);
+  const [editingExpense, setEditingExpense] = useState<Expense | null>(null);
+  const [editFormData, setEditFormData] = useState(initialForm);
+  const [isUpdating, setIsUpdating] = useState(false);
 
   const token = typeof window !== 'undefined' ? localStorage.getItem('authToken') : null;
   const filteredExpenses =
@@ -188,6 +194,62 @@ export default function ExpensesPage() {
     }
   };
 
+  const openEditModal = (expense: Expense) => {
+    setEditingExpense(expense);
+    setEditFormData({
+      title: expense.title,
+      amount: expense.amount.toString(),
+      expenseDate: new Date(expense.expenseDate).toISOString().split('T')[0],
+      category: expense.category,
+      paymentMethod: expense.paymentMethod,
+      notes: expense.notes || '',
+    });
+    setIsEditModalOpen(true);
+  };
+
+  const closeEditModal = () => {
+    setIsEditModalOpen(false);
+    setEditingExpense(null);
+  };
+
+  const handleEditSubmit = async (event: React.FormEvent) => {
+    event.preventDefault();
+    if (!editingExpense?._id) return;
+
+    setIsUpdating(true);
+    setError('');
+
+    try {
+      const response = await fetch(`/api/expenses?id=${editingExpense._id}`, {
+        method: 'PUT',
+        headers: {
+          'Content-Type': 'application/json',
+          Authorization: `Bearer ${token}`,
+        },
+        body: JSON.stringify(editFormData),
+      });
+
+      const data = (await response.json()) as ApiResponse;
+      if (!response.ok) {
+        throw new Error(data.message || 'Failed to update expense');
+      }
+
+      // Update the expense in the list
+      setExpenses((currentExpenses) =>
+        currentExpenses.map((exp) =>
+          exp._id === editingExpense._id
+            ? { ...exp, ...editFormData, amount: Number(editFormData.amount) }
+            : exp
+        )
+      );
+      closeEditModal();
+    } catch (err) {
+      setError(err instanceof Error ? err.message : 'Failed to update expense');
+    } finally {
+      setIsUpdating(false);
+    }
+  };
+
   return (
     <div className="space-y-6 animate-in fade-in-0 slide-in-from-bottom-4 duration-500">
       {/* Header */}
@@ -265,7 +327,7 @@ export default function ExpensesPage() {
       </div>
 
       {/* Chart Section */}
-      {expenses.length > 0 && (
+      {/* {expenses.length > 0 && (
         <Card className="border-0 shadow-sm">
           <CardHeader className="pb-3">
             <CardTitle className="flex items-center gap-2 text-lg">
@@ -299,7 +361,7 @@ export default function ExpensesPage() {
             </ResponsiveContainer>
           </CardContent>
         </Card>
-      )}
+      )} */}
 
       <div className="grid grid-cols-1 gap-6 lg:grid-cols-[minmax(320px,380px)_minmax(0,1fr)]">
         {/* Add Expense Form */}
@@ -560,16 +622,28 @@ export default function ExpensesPage() {
                       <p className="font-bold text-emerald-600 dark:text-emerald-400 text-lg">
                         ₹{Number(expense.amount || 0).toLocaleString('en-IN')}
                       </p>
-                      <Button
-                        type="button"
-                        variant="ghost"
-                        size="sm"
-                        onClick={() => handleDelete(expense._id)}
-                        className="h-7 w-7 p-0 text-red-500 hover:text-red-600 hover:bg-red-50 dark:hover:bg-red-950/20"
-                        aria-label={`Delete ${expense.title}`}
-                      >
-                        <Trash2 size={14} />
-                      </Button>
+                      <div className="flex gap-1">
+                        <Button
+                          type="button"
+                          variant="ghost"
+                          size="sm"
+                          onClick={() => openEditModal(expense)}
+                          className="h-7 w-7 p-0 text-blue-500 hover:text-blue-600 hover:bg-blue-50 dark:hover:bg-blue-950/20"
+                          aria-label={`Edit ${expense.title}`}
+                        >
+                          <Edit size={14} />
+                        </Button>
+                        <Button
+                          type="button"
+                          variant="ghost"
+                          size="sm"
+                          onClick={() => handleDelete(expense._id)}
+                          className="h-7 w-7 p-0 text-red-500 hover:text-red-600 hover:bg-red-50 dark:hover:bg-red-950/20"
+                          aria-label={`Delete ${expense.title}`}
+                        >
+                          <Trash2 size={14} />
+                        </Button>
+                      </div>
                     </div>
                   </article>
                 ))}
@@ -603,10 +677,20 @@ export default function ExpensesPage() {
                         </p>
                       )}
                     </div>
-                    <div className="flex items-center gap-3 border-t pt-2 sm:border-t-0 sm:pt-0">
+                    <div className="flex items-center gap-2 border-t pt-2 sm:border-t-0 sm:pt-0">
                       <p className="font-bold text-emerald-600 dark:text-emerald-400 text-lg">
                         ₹{Number(expense.amount || 0).toLocaleString('en-IN')}
                       </p>
+                      <Button
+                        type="button"
+                        variant="ghost"
+                        size="sm"
+                        onClick={() => openEditModal(expense)}
+                        className="h-8 w-8 p-0 text-blue-500 hover:text-blue-600 hover:bg-blue-50 dark:hover:bg-blue-950/20"
+                        aria-label={`Edit ${expense.title}`}
+                      >
+                        <Edit size={16} />
+                      </Button>
                       <Button
                         type="button"
                         variant="ghost"
@@ -624,7 +708,131 @@ export default function ExpensesPage() {
             )}
           </CardContent>
         </Card>
-    </div>
+
+        {/* Edit Expense Modal */}
+        <Dialog open={isEditModalOpen} onOpenChange={setIsEditModalOpen}>
+          <DialogContent className="sm:max-w-[500px]">
+            <DialogHeader>
+              <DialogTitle className="flex items-center gap-2">
+                <div className="rounded-lg bg-blue-100 dark:bg-blue-900/30 p-2">
+                  <Edit className="w-5 h-5 text-blue-600 dark:text-blue-400" />
+                </div>
+                Edit Expense
+              </DialogTitle>
+              <DialogDescription>
+                Update the expense details below.
+              </DialogDescription>
+            </DialogHeader>
+            <form onSubmit={handleEditSubmit} className="space-y-4 py-4">
+              <div className="space-y-2">
+                <label htmlFor="edit-title" className="text-sm font-medium text-gray-700 dark:text-gray-300">
+                  Expense Title
+                </label>
+                <Input
+                  id="edit-title"
+                  value={editFormData.title}
+                  onChange={(e) => setEditFormData({ ...editFormData, title: e.target.value })}
+                  placeholder="Electricity bill"
+                  required
+                />
+              </div>
+
+              <div className="grid grid-cols-2 gap-4">
+                <div className="space-y-2">
+                  <label htmlFor="edit-amount" className="text-sm font-medium text-gray-700 dark:text-gray-300">
+                    Amount (₹)
+                  </label>
+                  <Input
+                    id="edit-amount"
+                    type="number"
+                    min="1"
+                    step="0.01"
+                    value={editFormData.amount}
+                    onChange={(e) => setEditFormData({ ...editFormData, amount: e.target.value })}
+                    required
+                  />
+                </div>
+                <div className="space-y-2">
+                  <label htmlFor="edit-date" className="text-sm font-medium text-gray-700 dark:text-gray-300">
+                    Date
+                  </label>
+                  <Input
+                    id="edit-date"
+                    type="date"
+                    value={editFormData.expenseDate}
+                    onChange={(e) => setEditFormData({ ...editFormData, expenseDate: e.target.value })}
+                    required
+                  />
+                </div>
+              </div>
+
+              <div className="grid grid-cols-2 gap-4">
+                <div className="space-y-2">
+                  <label htmlFor="edit-category" className="text-sm font-medium text-gray-700 dark:text-gray-300">
+                    Category
+                  </label>
+                  <select
+                    id="edit-category"
+                    value={editFormData.category}
+                    onChange={(e) => setEditFormData({ ...editFormData, category: e.target.value as ExpenseCategory })}
+                    className="h-10 w-full rounded-md border border-input bg-background px-3 py-2 text-sm"
+                  >
+                    {categories.map((cat) => (
+                      <option key={cat.value} value={cat.value}>{cat.label}</option>
+                    ))}
+                  </select>
+                </div>
+                <div className="space-y-2">
+                  <label htmlFor="edit-payment" className="text-sm font-medium text-gray-700 dark:text-gray-300">
+                    Payment Method
+                  </label>
+                  <select
+                    id="edit-payment"
+                    value={editFormData.paymentMethod}
+                    onChange={(e) => setEditFormData({ ...editFormData, paymentMethod: e.target.value as Expense['paymentMethod'] })}
+                    className="h-10 w-full rounded-md border border-input bg-background px-3 py-2 text-sm"
+                  >
+                    {paymentMethods.map((method) => (
+                      <option key={method.value} value={method.value}>{method.label}</option>
+                    ))}
+                  </select>
+                </div>
+              </div>
+
+              <div className="space-y-2">
+                <label htmlFor="edit-notes" className="text-sm font-medium text-gray-700 dark:text-gray-300">
+                  Notes (optional)
+                </label>
+                <Textarea
+                  id="edit-notes"
+                  value={editFormData.notes}
+                  onChange={(e) => setEditFormData({ ...editFormData, notes: e.target.value })}
+                  placeholder="Bill number, vendor, or any detail"
+                  rows={3}
+                />
+              </div>
+
+              <DialogFooter>
+                <Button
+                  type="button"
+                  variant="outline"
+                  onClick={closeEditModal}
+                  disabled={isUpdating}
+                >
+                  Cancel
+                </Button>
+                <Button
+                  type="submit"
+                  disabled={isUpdating}
+                  className="bg-blue-600 hover:bg-blue-700"
+                >
+                  {isUpdating ? 'Updating...' : 'Update Expense'}
+                </Button>
+              </DialogFooter>
+            </form>
+          </DialogContent>
+        </Dialog>
+      </div>
     </div>
   );
 }

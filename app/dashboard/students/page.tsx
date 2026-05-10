@@ -455,6 +455,9 @@ function StudentDetails({
         : 'bg-gray-100 text-gray-700';
 
   // Calculate days until due
+  const feePaidTillDate =
+    student.feePaidTillDate ||
+    new Date(new Date(student.nextDueDate).getTime() - 24 * 60 * 60 * 1000);
   const daysUntilDue = calculateDaysUntilDue(student.nextDueDate);
   const daysClass = daysUntilDue < 0 ? 'text-red-600' : daysUntilDue <= 3 ? 'text-yellow-600' : 'text-green-600';
 
@@ -523,8 +526,8 @@ function StudentDetails({
           color="blue"
         />
         <MetricCard
-          title="Next Due Date"
-          value={new Date(student.nextDueDate).toLocaleDateString('en-IN')}
+          title="Paid Till"
+          value={new Date(feePaidTillDate).toLocaleDateString('en-IN')}
           subtitle={`${Math.abs(daysUntilDue)} day${Math.abs(daysUntilDue) !== 1 ? 's' : ''} ${daysUntilDue < 0 ? 'overdue' : 'left'}`}
           icon={<CalendarDays size={18} />}
           color={daysUntilDue < 0 ? 'red' : daysUntilDue <= 3 ? 'yellow' : 'green'}
@@ -559,6 +562,7 @@ function StudentDetails({
               <InfoRow label="Parent Phone" value={student.parentPhone || 'Not added'} />
               <InfoRow label="Aadhaar" value={student.aadharNumber || 'Not added'} />
               <InfoRow label="Joining Date" value={new Date(student.joiningDate).toLocaleDateString('en-IN')} />
+              <InfoRow label="Fees Paid Till" value={new Date(feePaidTillDate).toLocaleDateString('en-IN')} />
               <InfoRow label="Monthly Fee" value={`₹${student.monthlyFee}`} />
             </div>
           </CardContent>

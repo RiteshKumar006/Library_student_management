@@ -12,6 +12,12 @@ function calculateStatus(nextDueDate: Date): 'active' | 'overdue' {
   return today > dueDate ? 'overdue' : 'active';
 }
 
+function addDays(date: Date, days: number) {
+  const nextDate = new Date(date);
+  nextDate.setDate(nextDate.getDate() + days);
+  return nextDate;
+}
+
 function isValidStudentId(id: string) {
   return ObjectId.isValid(id);
 }
@@ -137,14 +143,19 @@ export async function PUT(
       updateData.joiningDate = new Date(body.joiningDate);
     }
 
-    if (
+    if (body.feePaidTillDate) {
+      const feePaidTillDate = new Date(body.feePaidTillDate);
+      feePaidTillDate.setHours(0, 0, 0, 0);
+      updateData.feePaidTillDate = feePaidTillDate;
+      updateData.nextDueDate = addDays(feePaidTillDate, 1);
+    } else if (
       body.joiningDate &&
       new Date(body.joiningDate).toDateString() !== new Date(currentStudent.joiningDate).toDateString()
     ) {
       const joiningDateObj = new Date(body.joiningDate);
-      const nextDueDate = new Date(joiningDateObj);
-      nextDueDate.setMonth(nextDueDate.getMonth() + 1);
-      updateData.nextDueDate = nextDueDate;
+      joiningDateObj.setHours(0, 0, 0, 0);
+      updateData.feePaidTillDate = addDays(joiningDateObj, -1);
+      updateData.nextDueDate = joiningDateObj;
     }
 
     const updatedStudent = await studentsCollection.findOneAndUpdate(

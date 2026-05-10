@@ -1,12 +1,12 @@
 'use client';
 
-import { useState, useEffect } from 'react';
+import { useState, useEffect, useMemo } from 'react';
 import { Student, FeeRecord, ApiResponse } from '@/types';
 import { Button } from '@/components/ui/button';
 import { Input } from '@/components/ui/input';
 import { Card, CardContent, CardHeader, CardTitle } from '@/components/ui/card';
 import { Alert, AlertDescription } from '@/components/ui/alert';
-import { AlertCircle, X, Plus, Trash2, CheckCircle2 } from 'lucide-react';
+import { AlertCircle, X, CheckCircle2 } from 'lucide-react';
 import { PAYMENT_METHODS } from '@/lib/constants';
 
 interface PaymentFormProps {
@@ -17,6 +17,7 @@ interface PaymentFormProps {
     paymentDate: string;
     paymentMethod: string;
     notes?: string;
+    feePaidTillDate?: string;
     monthsCovered?: { month: number; year: number }[];
   }) => Promise<void>;
   onCancel: () => void;
@@ -29,14 +30,22 @@ export function PaymentForm({
   onCancel,
   isLoading,
 }: PaymentFormProps) {
+  const currentPaidTillDate = useMemo(
+    () => getPaidTillDate(student),
+    [student.feePaidTillDate, student.nextDueDate]
+  );
+  const defaultPaidTillDate = useMemo(
+    () => getEndOfNextMonth(currentPaidTillDate),
+    [currentPaidTillDate]
+  );
   const [formData, setFormData] = useState({
     amount: student.monthlyFee,
     paymentDate: new Date().toISOString().split('T')[0],
+    feePaidTillDate: formatDateInput(defaultPaidTillDate),
     paymentMethod: 'cash',
     notes: '',
   });
 
-  const [selectedMonths, setSelectedMonths] = useState<{ month: number; year: number }[]>([]);
   const [error, setError] = useState('');
   const [success, setSuccess] = useState(false);
   const [feeRecords, setFeeRecords] = useState<FeeRecord[]>([]);
@@ -70,27 +79,6 @@ export function PaymentForm({
     }
   }, [student._id]);
 
-  // Generate available months for selection (current month and previous 12 months)
-  const generateAvailableMonths = () => {
-    const months = [];
-    const today = new Date();
-    const currentYear = today.getFullYear();
-    
-    // Show all 12 months of current year
-    for (let i = 0; i < 12; i++) {
-      const date = new Date(currentYear, i, 1);
-      months.push({
-        month: date.getMonth(),
-        year: date.getFullYear(),
-        label: date.toLocaleDateString('en-US', { month: 'short' }),
-        fullLabel: date.toLocaleDateString('en-US', { month: 'long' }),
-      });
-    }
-    
-    // Sort by month ascending
-    return months.sort((a, b) => a.month - b.month);
-  };
-
   // Check if a month is already paid
   const isMonthPaid = (month: number, year: number) => {
     return feeRecords.some(
@@ -98,31 +86,36 @@ export function PaymentForm({
     );
   };
 
-  // Get status of a month
-  const getMonthStatus = (month: number, year: number) => {
-    const record = feeRecords.find(
-      (r: FeeRecord) => r.month === month && r.year === year
-    );
-    return record?.status || 'unpaid';
-  };
+  const selectedPaidTillDate = useMemo(
+    () => (formData.feePaidTillDate ? new Date(formData.feePaidTillDate) : null),
+    [formData.feePaidTillDate]
+  );
+  const selectedMonths = useMemo(() => {
+    if (!selectedPaidTillDate || selectedPaidTillDate <= currentPaidTillDate) {
+      return [];
+    }
 
-  const availableMonths = generateAvailableMonths();
+    return getCoveredMonths(addDays(currentPaidTillDate, 1), selectedPaidTillDate).filter(
+      ({ month, year }) => !isMonthPaid(month, year)
+    );
+  }, [formData.feePaidTillDate, feeRecords, currentPaidTillDate]);
+
+  const visibleMonths = useMemo(() => {
+    const paidMonths = feeRecords
+      .filter((record) => record.status === 'paid')
+      .map((record) => ({ month: record.month, year: record.year }));
+    const uniqueMonths = [...paidMonths, ...selectedMonths].filter(
+      (month, index, months) =>
+        months.findIndex((item) => item.month === month.month && item.year === month.year) === index
+    );
+
+    return uniqueMonths.sort((a, b) => new Date(a.year, a.month).getTime() - new Date(b.year, b.month).getTime());
+  }, [feeRecords, selectedMonths]);
 
   const handleChange = (e: React.ChangeEvent<HTMLInputElement | HTMLSelectElement | HTMLTextAreaElement>) => {
     const { name, value } = e.target;
     setFormData((prev) => ({ ...prev, [name]: value }));
     setError('');
-  };
-
-  const handleMonthToggle = (month: number, year: number) => {
-    setSelectedMonths(prev => {
-      const exists = prev.find(m => m.month === month && m.year === year);
-      if (exists) {
-        return prev.filter(m => !(m.month === month && m.year === year));
-      } else {
-        return [...prev, { month, year }];
-      }
-    });
   };
 
   const calculateTotalAmount = () => {
@@ -131,7 +124,8 @@ export function PaymentForm({
   };
 
   useEffect(() => {
-    setFormData(prev => ({ ...prev, amount: calculateTotalAmount() }));
+    const amount = calculateTotalAmount();
+    setFormData(prev => (prev.amount === amount ? prev : { ...prev, amount }));
   }, [selectedMonths, student.monthlyFee]);
 
   const handleSubmit = async (e: React.FormEvent) => {
@@ -145,7 +139,7 @@ export function PaymentForm({
     }
 
     if (selectedMonths.length === 0) {
-      setError('Please select at least one month to cover');
+      setError('Fees paid till date must cover at least one unpaid month');
       return;
     }
 
@@ -156,6 +150,7 @@ export function PaymentForm({
         paymentDate: formData.paymentDate,
         paymentMethod: formData.paymentMethod,
         notes: formData.notes,
+        feePaidTillDate: formData.feePaidTillDate,
         monthsCovered: selectedMonths,
       });
       setSuccess(true);
@@ -232,6 +227,25 @@ export function PaymentForm({
             </div>
 
             <div className="space-y-2 md:col-span-2">
+              <label htmlFor="feePaidTillDate" className="text-sm font-medium text-gray-700">
+                Fees Paid Till Date *
+              </label>
+              <Input
+                id="feePaidTillDate"
+                name="feePaidTillDate"
+                type="date"
+                min={formatDateInput(addDays(currentPaidTillDate, 1))}
+                value={formData.feePaidTillDate}
+                onChange={handleChange}
+                disabled={isLoading}
+                required
+              />
+              <p className="text-xs text-gray-600">
+                Current paid till: {currentPaidTillDate.toLocaleDateString('en-IN')}
+              </p>
+            </div>
+
+            <div className="space-y-2 md:col-span-2">
               <label htmlFor="paymentMethod" className="text-sm font-medium text-gray-700">
                 Payment Method *
               </label>
@@ -255,31 +269,37 @@ export function PaymentForm({
             <div className="space-y-3 md:col-span-2">
               <div className="flex items-center justify-between">
                 <label className="text-sm font-medium text-gray-700">
-                  Months to Cover * <span className="text-gray-500 text-xs">({new Date().getFullYear()})</span>
+                  Months to Cover
                 </label>
               </div>
               
               {/* Month Grid */}
               <div className="bg-gray-50 p-4 rounded-lg border border-gray-200">
-                <div className="grid grid-cols-3 md:grid-cols-6 gap-2">
-                  {availableMonths.map(({ month, year, label, fullLabel }) => {
+                {visibleMonths.length === 0 ? (
+                  <p className="py-4 text-center text-sm text-gray-600">
+                    Select a later paid till date to calculate covered months.
+                  </p>
+                ) : (
+                  <div className="grid grid-cols-3 md:grid-cols-6 gap-2">
+                  {visibleMonths.map(({ month, year }) => {
                     const paid = isMonthPaid(month, year);
                     const isSelected = selectedMonths.some(m => m.month === month && m.year === year);
-                    const status = getMonthStatus(month, year);
+                    const date = new Date(year, month, 1);
+                    const label = date.toLocaleDateString('en-US', { month: 'short' });
+                    const fullLabel = date.toLocaleDateString('en-US', { month: 'long', year: 'numeric' });
                     
                     return (
                       <button
                         key={`${year}-${month}`}
                         type="button"
-                        onClick={() => !paid && handleMonthToggle(month, year)}
-                        disabled={paid || isLoading}
+                        disabled
                         title={fullLabel}
                         className={`relative p-3 rounded-lg font-medium text-sm transition-all duration-200 border-2 ${
                           paid
                             ? 'bg-green-100 border-green-400 text-green-700 cursor-not-allowed shadow-sm'
                             : isSelected
-                              ? 'bg-blue-500 border-blue-600 text-white shadow-md scale-105'
-                              : 'bg-white border-gray-300 text-gray-700 hover:border-gray-400 hover:shadow-sm cursor-pointer'
+                              ? 'bg-blue-500 border-blue-600 text-white shadow-md'
+                              : 'bg-white border-gray-300 text-gray-700'
                         }`}
                       >
                         <div className="flex flex-col items-center gap-1">
@@ -294,7 +314,8 @@ export function PaymentForm({
                       </button>
                     );
                   })}
-                </div>
+                  </div>
+                )}
               </div>
 
               {/* Legend */}
@@ -326,9 +347,10 @@ export function PaymentForm({
                   </p>
                   <p className="text-xs text-blue-600 mt-1">
                     {selectedMonths
-                      .sort((a, b) => a.month - b.month)
+                      .slice()
+                      .sort((a, b) => new Date(a.year, a.month).getTime() - new Date(b.year, b.month).getTime())
                       .map(m => {
-                        const monthName = new Date(m.year, m.month, 1).toLocaleDateString('en-US', { month: 'short' });
+                        const monthName = new Date(m.year, m.month, 1).toLocaleDateString('en-US', { month: 'short', year: 'numeric' });
                         return monthName;
                       })
                       .join(', ')}
@@ -370,4 +392,39 @@ export function PaymentForm({
       </CardContent>
     </Card>
   );
+}
+
+function formatDateInput(date: Date) {
+  return date.toISOString().split('T')[0];
+}
+
+function addDays(date: Date, days: number) {
+  const nextDate = new Date(date);
+  nextDate.setDate(nextDate.getDate() + days);
+  return nextDate;
+}
+
+function getPaidTillDate(student: Student) {
+  const paidTillDate = student.feePaidTillDate
+    ? new Date(student.feePaidTillDate)
+    : addDays(new Date(student.nextDueDate), -1);
+  paidTillDate.setHours(0, 0, 0, 0);
+  return paidTillDate;
+}
+
+function getEndOfNextMonth(date: Date) {
+  return new Date(date.getFullYear(), date.getMonth() + 2, 0);
+}
+
+function getCoveredMonths(startDate: Date, paidTillDate: Date) {
+  const months: { month: number; year: number }[] = [];
+  const cursor = new Date(startDate.getFullYear(), startDate.getMonth(), 1);
+  const end = new Date(paidTillDate.getFullYear(), paidTillDate.getMonth(), 1);
+
+  while (cursor <= end) {
+    months.push({ month: cursor.getMonth(), year: cursor.getFullYear() });
+    cursor.setMonth(cursor.getMonth() + 1);
+  }
+
+  return months;
 }

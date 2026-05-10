@@ -41,7 +41,7 @@ export async function GET(request: NextRequest) {
       today.setHours(0, 0, 0, 0);
 
       const activeStudents = await studentsCollection.countDocuments({
-        status: 'active',
+        nextDueDate: { $gte: today },
       });
 
       // Overdue students

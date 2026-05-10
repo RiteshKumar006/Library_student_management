@@ -16,7 +16,7 @@ export async function POST(request: NextRequest) {
     }
 
     const body = await request.json();
-    const { studentId, amount, paymentDate, paymentMethod, notes, monthsCovered } = body;
+    const { studentId, amount, paymentDate, paymentMethod, notes, monthsCovered, feePaidTillDate } = body;
 
     if (!studentId || !amount || !paymentDate || !paymentMethod) {
       return NextResponse.json(
@@ -105,7 +105,12 @@ export async function POST(request: NextRequest) {
         return currentDate > latestDate ? current : latest;
       });
 
-      const nextDueDate = new Date(lastPaidMonth.year, lastPaidMonth.month + 1, 1);
+      const paidTillDate = feePaidTillDate
+        ? new Date(feePaidTillDate)
+        : new Date(lastPaidMonth.year, lastPaidMonth.month + 1, 0);
+      paidTillDate.setHours(0, 0, 0, 0);
+      const nextDueDate = new Date(paidTillDate);
+      nextDueDate.setDate(nextDueDate.getDate() + 1);
       const paymentDateObj = new Date(paymentDate);
 
       // Prepare paid months array to add to student record
@@ -140,6 +145,7 @@ export async function POST(request: NextRequest) {
         { _id: new ObjectId(studentId) },
         {
           $set: {
+            feePaidTillDate: paidTillDate,
             nextDueDate,
             paidMonths: mergedPaidMonths,
             totalFeesCollected: existingTotal + parseFloat(amount),
@@ -148,9 +154,11 @@ export async function POST(request: NextRequest) {
         }
       );
     } else {
-      // Legacy behavior: add one month to next due date
-      const nextDueDate = new Date();
-      nextDueDate.setMonth(nextDueDate.getMonth() + 1);
+      // Legacy behavior: treat the payment as covering one month from today.
+      const feePaidTillDate = new Date();
+      feePaidTillDate.setMonth(feePaidTillDate.getMonth() + 1);
+      const nextDueDate = new Date(feePaidTillDate);
+      nextDueDate.setDate(nextDueDate.getDate() + 1);
 
       const currentStudent = await studentsCollection.findOne(
         { _id: new ObjectId(studentId) },
@@ -163,6 +171,7 @@ export async function POST(request: NextRequest) {
         { _id: new ObjectId(studentId) },
         {
           $set: {
+            feePaidTillDate,
             nextDueDate,
             totalFeesCollected: existingTotal + parseFloat(amount),
             updatedAt: new Date(),

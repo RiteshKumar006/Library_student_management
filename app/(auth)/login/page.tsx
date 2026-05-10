@@ -27,7 +27,10 @@ export default function LoginPage() {
         body: JSON.stringify({ email, password }),
       });
 
-      const data = await response.json();
+      const contentType = response.headers.get('content-type') || '';
+      const data = contentType.includes('application/json')
+        ? await response.json()
+        : { message: `Login request failed with status ${response.status}` };
 
       if (response.ok && data.token) {
         localStorage.setItem('authToken', data.token);

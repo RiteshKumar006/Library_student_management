@@ -32,7 +32,12 @@ async function setupDatabase() {
       await adminsCollection.insertOne({
         email: 'admin@library.com',
         password: hashedPassword,
+        name: 'Library Admin',
+        phone: '+91 9876543210',
+        libraryName: 'LibraryHub',
+        address: '123 Main Street, City, State 123456',
         createdAt: new Date(),
+        updatedAt: new Date(),
       });
       console.log('✓ Admin user created: admin@library.com / admin123');
     } else {

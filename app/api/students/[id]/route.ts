@@ -3,6 +3,12 @@ import { getDatabase } from '@/lib/db';
 import { getTokenFromRequest, verifyToken } from '@/lib/auth';
 import { ApiResponse } from '@/types';
 import { ObjectId } from 'mongodb';
+import {
+  addDays,
+  getCoveredBillingMonths,
+  getNextDueDate,
+  toDateOnly,
+} from '@/lib/fee-calculation';
 
 function calculateStatus(nextDueDate: Date): 'active' | 'overdue' {
   const today = new Date();
@@ -10,12 +16,6 @@ function calculateStatus(nextDueDate: Date): 'active' | 'overdue' {
   const dueDate = new Date(nextDueDate);
   dueDate.setHours(0, 0, 0, 0);
   return today > dueDate ? 'overdue' : 'active';
-}
-
-function addDays(date: Date, days: number) {
-  const nextDate = new Date(date);
-  nextDate.setDate(nextDate.getDate() + days);
-  return nextDate;
 }
 
 function isValidStudentId(id: string) {
@@ -140,22 +140,33 @@ export async function PUT(
     }
 
     if (body.joiningDate) {
-      updateData.joiningDate = new Date(body.joiningDate);
+      updateData.joiningDate = toDateOnly(body.joiningDate);
     }
 
     if (body.feePaidTillDate) {
-      const feePaidTillDate = new Date(body.feePaidTillDate);
-      feePaidTillDate.setHours(0, 0, 0, 0);
+      const feePaidTillDate = toDateOnly(body.feePaidTillDate);
+      const joiningDate = updateData.joiningDate || toDateOnly(currentStudent.joiningDate);
+      const monthlyFee = updateData.monthlyFee ?? currentStudent.monthlyFee;
+      const coveredMonths =
+        feePaidTillDate >= joiningDate ? getCoveredBillingMonths(joiningDate, feePaidTillDate) : [];
+
       updateData.feePaidTillDate = feePaidTillDate;
-      updateData.nextDueDate = addDays(feePaidTillDate, 1);
+      updateData.nextDueDate = getNextDueDate(feePaidTillDate);
+      updateData.paidMonths = coveredMonths.map(({ month, year }) => ({
+        month,
+        year,
+        paidDate: currentStudent.joiningDate,
+      }));
+      updateData.totalFeesCollected = coveredMonths.length * monthlyFee;
     } else if (
       body.joiningDate &&
       new Date(body.joiningDate).toDateString() !== new Date(currentStudent.joiningDate).toDateString()
     ) {
-      const joiningDateObj = new Date(body.joiningDate);
-      joiningDateObj.setHours(0, 0, 0, 0);
+      const joiningDateObj = toDateOnly(body.joiningDate);
       updateData.feePaidTillDate = addDays(joiningDateObj, -1);
       updateData.nextDueDate = joiningDateObj;
+      updateData.paidMonths = [];
+      updateData.totalFeesCollected = 0;
     }
 
     const updatedStudent = await studentsCollection.findOneAndUpdate(

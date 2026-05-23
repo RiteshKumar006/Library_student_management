@@ -1,14 +1,33 @@
 'use client';
 
-import { useState, useEffect } from 'react';
-import { Button } from '@/components/ui/button';
-import { Card, CardContent, CardHeader, CardTitle, CardDescription } from '@/components/ui/card';
-import { Input } from '@/components/ui/input';
-import { Textarea } from '@/components/ui/textarea';
+import { useEffect, useState } from 'react';
+import { Admin } from '@/types';
 import { Alert, AlertDescription } from '@/components/ui/alert';
 import { Badge } from '@/components/ui/badge';
-import { CheckCircle, Moon, Sun, User, Mail, Phone, Building, MapPin, Lock, Save, X, Loader2, AlertCircle } from 'lucide-react';
-import { Admin } from '@/types';
+import { Button } from '@/components/ui/button';
+import { Card, CardContent, CardDescription, CardHeader, CardTitle } from '@/components/ui/card';
+import { Input } from '@/components/ui/input';
+import { Textarea } from '@/components/ui/textarea';
+import {
+  AlertCircle,
+  Building,
+  CheckCircle2,
+  CircleDollarSign,
+  Clock3,
+  Edit3,
+  Loader2,
+  LockKeyhole,
+  Mail,
+  MapPin,
+  Moon,
+  Phone,
+  Save,
+  ShieldCheck,
+  Sparkles,
+  Sun,
+  User,
+  X,
+} from 'lucide-react';
 
 export default function SettingsPage() {
   const [darkMode, setDarkMode] = useState(false);
@@ -16,8 +35,7 @@ export default function SettingsPage() {
   const [errorMessage, setErrorMessage] = useState('');
   const [isLoading, setIsLoading] = useState(true);
   const [isSaving, setIsSaving] = useState(false);
-  
-  // Admin profile state
+  const [isEditing, setIsEditing] = useState(false);
   const [admin, setAdmin] = useState<Partial<Admin>>({
     name: '',
     email: '',
@@ -25,7 +43,6 @@ export default function SettingsPage() {
     libraryName: '',
     address: '',
   });
-  const [isEditing, setIsEditing] = useState(false);
   const [passwordData, setPasswordData] = useState({
     currentPassword: '',
     newPassword: '',
@@ -36,30 +53,28 @@ export default function SettingsPage() {
   const token = typeof window !== 'undefined' ? localStorage.getItem('authToken') : null;
 
   useEffect(() => {
-    // Check system preference or stored setting
     const isDark = localStorage.getItem('darkMode') === 'true';
     setDarkMode(isDark);
-    if (isDark) {
-      document.documentElement.classList.add('dark');
+    document.documentElement.classList.toggle('dark', isDark);
+
+    if (token) {
+      fetchAdminProfile();
     }
-  }, []);
+  }, [token]);
 
-  const toggleDarkMode = () => {
-    const newDarkMode = !darkMode;
-    setDarkMode(newDarkMode);
-    localStorage.setItem('darkMode', newDarkMode.toString());
-
-    if (newDarkMode) {
-      document.documentElement.classList.add('dark');
-    } else {
-      document.documentElement.classList.remove('dark');
-    }
-
-    setSuccessMessage('Theme updated successfully');
+  const showSuccess = (message: string) => {
+    setSuccessMessage(message);
     setTimeout(() => setSuccessMessage(''), 3000);
   };
 
-  // Fetch admin profile
+  const toggleDarkMode = () => {
+    const nextDarkMode = !darkMode;
+    setDarkMode(nextDarkMode);
+    localStorage.setItem('darkMode', nextDarkMode.toString());
+    document.documentElement.classList.toggle('dark', nextDarkMode);
+    showSuccess('Appearance updated successfully');
+  };
+
   const fetchAdminProfile = async () => {
     try {
       setIsLoading(true);
@@ -72,6 +87,7 @@ export default function SettingsPage() {
       if (response.ok) {
         const data = await response.json();
         setAdmin(data.data || {});
+        setErrorMessage('');
       } else {
         setErrorMessage('Failed to load profile');
       }
@@ -83,22 +99,8 @@ export default function SettingsPage() {
     }
   };
 
-  useEffect(() => {
-    // Check system preference or stored setting
-    const isDark = localStorage.getItem('darkMode') === 'true';
-    setDarkMode(isDark);
-    if (isDark) {
-      document.documentElement.classList.add('dark');
-    }
-
-    // Fetch admin profile
-    if (token) {
-      fetchAdminProfile();
-    }
-  }, [token]);
-
-  const handleProfileUpdate = async (e: React.FormEvent) => {
-    e.preventDefault();
+  const handleProfileUpdate = async (e?: React.FormEvent) => {
+    e?.preventDefault();
     if (!token) return;
 
     setIsSaving(true);
@@ -117,8 +119,9 @@ export default function SettingsPage() {
 
       const data = await response.json();
       if (response.ok) {
-        setSuccessMessage('Profile updated successfully');
+        setAdmin(data.data || admin);
         setIsEditing(false);
+        showSuccess('Profile updated successfully');
       } else {
         setErrorMessage(data.message || 'Failed to update profile');
       }
@@ -141,6 +144,7 @@ export default function SettingsPage() {
 
     setIsChangingPassword(true);
     setErrorMessage('');
+    setSuccessMessage('');
 
     try {
       const response = await fetch('/api/admin/password', {
@@ -157,8 +161,8 @@ export default function SettingsPage() {
 
       const data = await response.json();
       if (response.ok) {
-        setSuccessMessage('Password changed successfully');
         setPasswordData({ currentPassword: '', newPassword: '', confirmPassword: '' });
+        showSuccess('Password changed successfully');
       } else {
         setErrorMessage(data.message || 'Failed to change password');
       }
@@ -170,60 +174,54 @@ export default function SettingsPage() {
     }
   };
 
+  const profileCompletion = getProfileCompletion(admin);
+
   return (
     <div className="space-y-6 animate-in fade-in-0 slide-in-from-bottom-4 duration-500">
-      {/* Header */}
-      <div className="flex flex-col gap-2 sm:flex-row sm:items-center sm:justify-between">
-        <div>
-          <h1 className="text-3xl font-bold bg-gradient-to-r from-indigo-600 to-purple-600 bg-clip-text text-transparent">
-            Settings
-          </h1>
-          <p className="text-gray-600 dark:text-gray-400 text-sm">Manage your preferences and library settings</p>
-        </div>
-        {isEditing ? (
-          <div className="flex gap-2">
-            <Button
-              variant="outline"
-              onClick={() => setIsEditing(false)}
-              disabled={isSaving}
-              className="gap-2"
-            >
-              <X className="w-4 h-4" />
-              Cancel
-            </Button>
-            <Button
-              onClick={handleProfileUpdate}
-              disabled={isSaving}
-              className="bg-gradient-to-r from-indigo-600 to-purple-600 hover:from-indigo-700 hover:to-purple-700 gap-2"
-            >
-              {isSaving ? (
-                <>
-                  <Loader2 className="w-4 h-4 animate-spin" />
-                  Saving...
-                </>
-              ) : (
-                <>
-                  <Save className="w-4 h-4" />
-                  Save Changes
-                </>
-              )}
-            </Button>
+      <section className="overflow-hidden rounded-lg border border-white/80 bg-[linear-gradient(135deg,#ffffff_0%,#eef9f6_55%,#fff7ed_100%)] shadow-sm">
+        <div className="grid gap-6 p-5 sm:p-6 lg:grid-cols-[1fr_22rem] lg:p-7">
+          <div className="space-y-4">
+            <div className="flex flex-wrap items-center gap-2">
+              <Badge className="border-teal-200 bg-teal-50 text-teal-700 hover:bg-teal-50">
+                <Sparkles className="mr-1 h-3.5 w-3.5" />
+                Workspace Settings
+              </Badge>
+              <Badge variant="outline" className="border-slate-200 bg-white/70 text-slate-600">
+                {darkMode ? 'Dark theme' : 'Light theme'}
+              </Badge>
+            </div>
+            <div>
+              <h1 className="text-3xl font-bold tracking-normal text-slate-950 sm:text-4xl">Settings</h1>
+              <p className="mt-2 max-w-2xl text-sm leading-6 text-slate-600">
+                Manage admin details, account security, and library preferences from one clean place.
+              </p>
+            </div>
           </div>
-        ) : (
-          <Button
-            onClick={() => setIsEditing(true)}
-            className="bg-gradient-to-r from-indigo-600 to-purple-600 hover:from-indigo-700 hover:to-purple-700"
-          >
-            Edit Profile
-          </Button>
-        )}
-      </div>
 
-      {/* Messages */}
+          <div className="rounded-lg border border-white/80 bg-white/75 p-4 shadow-sm backdrop-blur">
+            <div className="flex items-start justify-between gap-3">
+              <div>
+                <p className="text-sm font-medium text-slate-500">Profile readiness</p>
+                <p className="mt-1 text-3xl font-bold text-slate-950">{profileCompletion}%</p>
+              </div>
+              <div className="flex h-11 w-11 items-center justify-center rounded-lg bg-teal-700 text-white">
+                <ShieldCheck className="h-5 w-5" />
+              </div>
+            </div>
+            <div className="mt-4 h-2 overflow-hidden rounded-full bg-slate-100">
+              <div className="h-full rounded-full bg-teal-700" style={{ width: `${profileCompletion}%` }} />
+            </div>
+            <p className="mt-3 text-xs text-slate-500">
+              {admin.libraryName || 'Library profile'} is connected to {admin.email || 'your admin account'}.
+            </p>
+          </div>
+        </div>
+      </section>
+
       {successMessage && (
-        <Alert className="border-green-200 bg-green-50 dark:bg-green-950/20">
-          <CheckCircle className="h-4 w-4 text-green-600" />
-          <AlertDescription className="text-green-800 dark:text-green-200">{successMessage}</AlertDescription>
+        <Alert className="border-emerald-200 bg-emerald-50 text-emerald-900">
+          <CheckCircle2 className="h-4 w-4 text-emerald-600" />
+          <AlertDescription>{successMessage}</AlertDescription>
         </Alert>
       )}
 
@@ -235,296 +233,317 @@ export default function SettingsPage() {
       )}
 
       {isLoading ? (
-        <div className="flex items-center justify-center py-12">
+        <div className="flex items-center justify-center rounded-lg border border-slate-200 bg-white py-16 shadow-sm">
           <div className="text-center">
-            <div className="mx-auto mb-3 h-8 w-8 animate-spin rounded-full border-3 border-indigo-200 border-t-indigo-600"></div>
-            <p className="text-gray-600 dark:text-gray-400 text-sm">Loading settings...</p>
+            <div className="mx-auto mb-3 h-9 w-9 animate-spin rounded-full border-3 border-teal-100 border-t-teal-700" />
+            <p className="text-sm text-slate-600">Loading settings...</p>
           </div>
         </div>
       ) : (
-        <>
-          {/* Profile Information */}
-          <Card className="border-0 shadow-sm">
-            <CardHeader className="pb-4 border-b border-gray-100 dark:border-gray-800">
-              <CardTitle className="flex items-center gap-2 text-lg">
-                <User className="w-5 h-5 text-indigo-600" />
-                Profile Information
-              </CardTitle>
-              <CardDescription>Manage your personal and library details</CardDescription>
-            </CardHeader>
-            <CardContent className="pt-6">
-              <div className="grid gap-6 sm:grid-cols-2">
-                <div className="space-y-2">
-                  <label className="text-sm font-semibold text-gray-700 dark:text-gray-300 flex items-center gap-2">
-                    <User className="w-4 h-4 text-gray-400" />
-                    Full Name
-                  </label>
-                  {isEditing ? (
+        <div className="grid gap-6 xl:grid-cols-[minmax(0,1fr)_24rem]">
+          <div className="space-y-6">
+            <Card className="border-slate-200 bg-white shadow-sm">
+              <CardHeader className="flex flex-col gap-4 border-b border-slate-100 sm:flex-row sm:items-center sm:justify-between">
+                <div>
+                  <CardTitle className="flex items-center gap-2 text-slate-950">
+                    <User className="h-5 w-5 text-teal-700" />
+                    Profile Information
+                  </CardTitle>
+                  <CardDescription>Details used across your admin workspace.</CardDescription>
+                </div>
+                {isEditing ? (
+                  <div className="flex gap-2">
+                    <Button variant="outline" onClick={() => setIsEditing(false)} disabled={isSaving}>
+                      <X className="h-4 w-4" />
+                      Cancel
+                    </Button>
+                    <Button onClick={() => handleProfileUpdate()} disabled={isSaving} className="bg-teal-700 hover:bg-teal-800">
+                      {isSaving ? <Loader2 className="h-4 w-4 animate-spin" /> : <Save className="h-4 w-4" />}
+                      {isSaving ? 'Saving...' : 'Save'}
+                    </Button>
+                  </div>
+                ) : (
+                  <Button onClick={() => setIsEditing(true)} className="bg-slate-950 hover:bg-slate-800">
+                    <Edit3 className="h-4 w-4" />
+                    Edit Profile
+                  </Button>
+                )}
+              </CardHeader>
+              <CardContent className="pt-6">
+                <form onSubmit={handleProfileUpdate} className="grid gap-5 sm:grid-cols-2">
+                  <SettingsField
+                    icon={<User className="h-4 w-4" />}
+                    label="Full Name"
+                    value={admin.name}
+                    isEditing={isEditing}
+                  >
                     <Input
                       value={admin.name || ''}
                       onChange={(e) => setAdmin({ ...admin, name: e.target.value })}
                       placeholder="Enter your name"
-                      className="h-10"
+                      className="h-11 border-slate-200"
                     />
-                  ) : (
-                    <p className="text-gray-900 dark:text-gray-100 py-2.5 px-3 bg-gray-50 dark:bg-gray-900 rounded-md border border-gray-200 dark:border-gray-800">
-                      {admin.name || 'Not set'}
-                    </p>
-                  )}
-                </div>
+                  </SettingsField>
 
-                <div className="space-y-2">
-                  <label className="text-sm font-semibold text-gray-700 dark:text-gray-300 flex items-center gap-2">
-                    <Mail className="w-4 h-4 text-gray-400" />
-                    Email Address
-                  </label>
-                  {isEditing ? (
-                    <Input
-                      type="email"
-                      value={admin.email || ''}
-                      onChange={(e) => setAdmin({ ...admin, email: e.target.value })}
-                      placeholder="admin@library.com"
-                      className="h-10"
-                      required
-                    />
-                  ) : (
-                    <p className="text-gray-900 dark:text-gray-100 py-2.5 px-3 bg-gray-50 dark:bg-gray-900 rounded-md border border-gray-200 dark:border-gray-800">
-                      {admin.email || 'Not set'}
-                    </p>
-                  )}
-                </div>
+                  <SettingsField
+                    icon={<Mail className="h-4 w-4" />}
+                    label="Email Address"
+                    value={admin.email}
+                    helper="Email is used for login"
+                    isEditing={false}
+                  />
 
-                <div className="space-y-2">
-                  <label className="text-sm font-semibold text-gray-700 dark:text-gray-300 flex items-center gap-2">
-                    <Phone className="w-4 h-4 text-gray-400" />
-                    Phone Number
-                  </label>
-                  {isEditing ? (
+                  <SettingsField
+                    icon={<Phone className="h-4 w-4" />}
+                    label="Phone Number"
+                    value={admin.phone}
+                    isEditing={isEditing}
+                  >
                     <Input
                       type="tel"
                       value={admin.phone || ''}
                       onChange={(e) => setAdmin({ ...admin, phone: e.target.value })}
                       placeholder="+91 9876543210"
-                      className="h-10"
+                      className="h-11 border-slate-200"
                     />
-                  ) : (
-                    <p className="text-gray-900 dark:text-gray-100 py-2.5 px-3 bg-gray-50 dark:bg-gray-900 rounded-md border border-gray-200 dark:border-gray-800">
-                      {admin.phone || 'Not set'}
-                    </p>
-                  )}
-                </div>
+                  </SettingsField>
 
-                <div className="space-y-2">
-                  <label className="text-sm font-semibold text-gray-700 dark:text-gray-300 flex items-center gap-2">
-                    <Building className="w-4 h-4 text-gray-400" />
-                    Library Name
-                  </label>
-                  {isEditing ? (
+                  <SettingsField
+                    icon={<Building className="h-4 w-4" />}
+                    label="Library Name"
+                    value={admin.libraryName}
+                    isEditing={isEditing}
+                  >
                     <Input
                       value={admin.libraryName || ''}
                       onChange={(e) => setAdmin({ ...admin, libraryName: e.target.value })}
                       placeholder="Your Library Hub"
-                      className="h-10"
+                      className="h-11 border-slate-200"
                     />
-                  ) : (
-                    <p className="text-gray-900 dark:text-gray-100 py-2.5 px-3 bg-gray-50 dark:bg-gray-900 rounded-md border border-gray-200 dark:border-gray-800">
-                      {admin.libraryName || 'Not set'}
-                    </p>
-                  )}
-                </div>
+                  </SettingsField>
 
-                <div className="space-y-2 sm:col-span-2">
-                  <label className="text-sm font-semibold text-gray-700 dark:text-gray-300 flex items-center gap-2">
-                    <MapPin className="w-4 h-4 text-gray-400" />
-                    Address
-                  </label>
-                  {isEditing ? (
-                    <Textarea
-                      value={admin.address || ''}
-                      onChange={(e) => setAdmin({ ...admin, address: e.target.value })}
-                      placeholder="Library address"
-                      rows={3}
-                      className="resize-none"
-                    />
-                  ) : (
-                    <p className="text-gray-900 dark:text-gray-100 py-2.5 px-3 bg-gray-50 dark:bg-gray-900 rounded-md border border-gray-200 dark:border-gray-800 min-h-[3.5rem]">
-                      {admin.address || 'Not set'}
-                    </p>
-                  )}
-                </div>
-              </div>
-            </CardContent>
-          </Card>
+                  <div className="sm:col-span-2">
+                    <SettingsField
+                      icon={<MapPin className="h-4 w-4" />}
+                      label="Address"
+                      value={admin.address}
+                      isEditing={isEditing}
+                    >
+                      <Textarea
+                        value={admin.address || ''}
+                        onChange={(e) => setAdmin({ ...admin, address: e.target.value })}
+                        placeholder="Library address"
+                        rows={3}
+                        className="resize-none border-slate-200"
+                      />
+                    </SettingsField>
+                  </div>
+                </form>
+              </CardContent>
+            </Card>
 
-          {/* Change Password Section */}
-          <Card className="border-0 shadow-sm">
-            <CardHeader className="pb-4 border-b border-gray-100 dark:border-gray-800">
-              <CardTitle className="flex items-center gap-2 text-lg">
-                <Lock className="w-5 h-5 text-indigo-600" />
-                Change Password
-              </CardTitle>
-              <CardDescription>Update your password to keep your account secure</CardDescription>
-            </CardHeader>
-            <CardContent className="pt-6">
-              <form onSubmit={handlePasswordChange} className="max-w-md space-y-4">
-                <div className="space-y-2">
-                  <label htmlFor="current-password" className="text-sm font-semibold text-gray-700 dark:text-gray-300">
-                    Current Password
-                  </label>
-                  <Input
+            <Card className="border-slate-200 bg-white shadow-sm">
+              <CardHeader className="border-b border-slate-100">
+                <CardTitle className="flex items-center gap-2 text-slate-950">
+                  <LockKeyhole className="h-5 w-5 text-teal-700" />
+                  Account Security
+                </CardTitle>
+                <CardDescription>Update your password when access needs to be refreshed.</CardDescription>
+              </CardHeader>
+              <CardContent className="pt-6">
+                <form onSubmit={handlePasswordChange} className="grid gap-4 lg:grid-cols-3">
+                  <PasswordField
                     id="current-password"
-                    type="password"
+                    label="Current Password"
                     value={passwordData.currentPassword}
-                    onChange={(e) => setPasswordData({ ...passwordData, currentPassword: e.target.value })}
-                    placeholder="Enter current password"
-                    className="h-10"
-                    required
+                    onChange={(value) => setPasswordData({ ...passwordData, currentPassword: value })}
+                    placeholder="Current password"
                   />
-                </div>
-                <div className="grid grid-cols-2 gap-4">
-                  <div className="space-y-2">
-                    <label htmlFor="new-password" className="text-sm font-semibold text-gray-700 dark:text-gray-300">
-                      New Password
-                    </label>
-                    <Input
-                      id="new-password"
-                      type="password"
-                      value={passwordData.newPassword}
-                      onChange={(e) => setPasswordData({ ...passwordData, newPassword: e.target.value })}
-                      placeholder="New password"
-                      className="h-10"
-                      required
-                    />
+                  <PasswordField
+                    id="new-password"
+                    label="New Password"
+                    value={passwordData.newPassword}
+                    onChange={(value) => setPasswordData({ ...passwordData, newPassword: value })}
+                    placeholder="At least 6 characters"
+                  />
+                  <PasswordField
+                    id="confirm-password"
+                    label="Confirm Password"
+                    value={passwordData.confirmPassword}
+                    onChange={(value) => setPasswordData({ ...passwordData, confirmPassword: value })}
+                    placeholder="Confirm password"
+                  />
+                  <div className="lg:col-span-3">
+                    <Button type="submit" disabled={isChangingPassword} variant="outline" className="border-slate-300 bg-white">
+                      {isChangingPassword ? (
+                        <Loader2 className="h-4 w-4 animate-spin" />
+                      ) : (
+                        <LockKeyhole className="h-4 w-4" />
+                      )}
+                      {isChangingPassword ? 'Updating...' : 'Change Password'}
+                    </Button>
                   </div>
-                  <div className="space-y-2">
-                    <label htmlFor="confirm-password" className="text-sm font-semibold text-gray-700 dark:text-gray-300">
-                      Confirm Password
-                    </label>
-                    <Input
-                      id="confirm-password"
-                      type="password"
-                      value={passwordData.confirmPassword}
-                      onChange={(e) => setPasswordData({ ...passwordData, confirmPassword: e.target.value })}
-                      placeholder="Confirm new password"
-                      className="h-10"
-                      required
-                    />
-                  </div>
-                </div>
-                <Button
-                  type="submit"
-                  disabled={isChangingPassword}
-                  variant="outline"
-                  className="mt-2"
-                >
-                  {isChangingPassword ? (
-                    <>
-                      <Loader2 className="w-4 h-4 mr-2 animate-spin" />
-                      Updating...
-                    </>
-                  ) : (
-                    <>
-                      <Lock className="w-4 h-4 mr-2" />
-                      Change Password
-                    </>
-                  )}
-                </Button>
-              </form>
-            </CardContent>
-          </Card>
+                </form>
+              </CardContent>
+            </Card>
+          </div>
 
-          {/* Theme Settings */}
-          <Card className="border-0 shadow-sm">
-            <CardHeader>
-              <CardTitle className="flex items-center gap-2">
-                {darkMode ? <Moon className="w-5 h-5 text-indigo-600" /> : <Sun className="w-5 h-5 text-yellow-600" />}
-                Appearance
-              </CardTitle>
-              <CardDescription>Customize how the app looks</CardDescription>
-            </CardHeader>
-            <CardContent>
-              <div className="flex items-center justify-between p-4 border rounded-lg hover:bg-gray-50 dark:hover:bg-gray-900/50 transition-colors">
-                <div className="flex items-center gap-3">
-                  {darkMode ? (
-                    <Moon className="w-5 h-5 text-indigo-600" />
-                  ) : (
-                    <Sun className="w-5 h-5 text-yellow-600" />
-                  )}
-                  <div>
-                    <p className="font-medium text-gray-900 dark:text-gray-100">Dark Mode</p>
-                    <p className="text-sm text-gray-600 dark:text-gray-400">
-                      {darkMode ? 'Dark mode is enabled' : 'Switch to dark mode'}
-                    </p>
-                  </div>
-                </div>
-                <Button
+          <aside className="space-y-6">
+            <Card className="border-slate-200 bg-white shadow-sm">
+              <CardHeader>
+                <CardTitle className="flex items-center gap-2 text-slate-950">
+                  {darkMode ? <Moon className="h-5 w-5 text-slate-700" /> : <Sun className="h-5 w-5 text-amber-500" />}
+                  Appearance
+                </CardTitle>
+                <CardDescription>Choose the workspace theme.</CardDescription>
+              </CardHeader>
+              <CardContent>
+                <button
+                  type="button"
                   onClick={toggleDarkMode}
-                  variant={darkMode ? 'default' : 'outline'}
-                  className={darkMode ? 'bg-indigo-600 hover:bg-indigo-700' : ''}
+                  className="flex w-full items-center justify-between rounded-lg border border-slate-200 bg-slate-50 p-4 text-left transition-colors hover:bg-white"
                 >
-                  {darkMode ? 'On' : 'Off'}
-                </Button>
-              </div>
-            </CardContent>
-          </Card>
+                  <div className="flex items-center gap-3">
+                    <div className="flex h-10 w-10 items-center justify-center rounded-lg bg-white text-slate-700 shadow-sm">
+                      {darkMode ? <Moon className="h-5 w-5" /> : <Sun className="h-5 w-5 text-amber-500" />}
+                    </div>
+                    <div>
+                      <p className="font-semibold text-slate-950">{darkMode ? 'Dark Mode' : 'Light Mode'}</p>
+                      <p className="text-sm text-slate-500">{darkMode ? 'Tap to switch off' : 'Tap to switch on'}</p>
+                    </div>
+                  </div>
+                  <span
+                    className={`relative h-6 w-11 rounded-full transition-colors ${
+                      darkMode ? 'bg-teal-700' : 'bg-slate-300'
+                    }`}
+                  >
+                    <span
+                      className={`absolute top-1 h-4 w-4 rounded-full bg-white transition-transform ${
+                        darkMode ? 'translate-x-6' : 'translate-x-1'
+                      }`}
+                    />
+                  </span>
+                </button>
+              </CardContent>
+            </Card>
 
-          {/* Library Configuration (Read-only) */}
-          <Card className="border-0 shadow-sm">
-            <CardHeader>
-              <CardTitle className="flex items-center gap-2">
-                <Building className="w-5 h-5 text-emerald-600" />
-                Library Configuration
-              </CardTitle>
-              <CardDescription>Basic library settings</CardDescription>
-            </CardHeader>
-            <CardContent>
-              <div className="grid gap-4 sm:grid-cols-3">
-                <div className="p-4 bg-gradient-to-br from-blue-50 to-indigo-50 dark:from-blue-950/20 dark:to-indigo-950/20 rounded-xl border border-blue-100 dark:border-blue-900">
-                  <p className="text-sm text-gray-600 dark:text-gray-400 mb-1">Library Name</p>
-                  <p className="text-lg font-bold text-gray-900 dark:text-gray-100">
-                    {admin.libraryName || 'Your Library Hub'}
-                  </p>
-                </div>
-                <div className="p-4 bg-gradient-to-br from-green-50 to-emerald-50 dark:from-green-950/20 dark:to-emerald-950/20 rounded-xl border border-green-100 dark:border-green-900">
-                  <p className="text-sm text-gray-600 dark:text-gray-400 mb-1">Total Seats</p>
-                  <p className="text-lg font-bold text-gray-900 dark:text-gray-100">50</p>
-                </div>
-                <div className="p-4 bg-gradient-to-br from-purple-50 to-violet-50 dark:from-purple-950/20 dark:to-violet-950/20 rounded-xl border border-purple-100 dark:border-purple-900">
-                  <p className="text-sm text-gray-600 dark:text-gray-400 mb-1">Fee Schedule</p>
-                  <p className="text-lg font-bold text-gray-900 dark:text-gray-100">Monthly</p>
-                </div>
-              </div>
-            </CardContent>
-          </Card>
-
-          {/* About */}
-          <Card className="border-0 shadow-sm">
-            <CardHeader>
-              <CardTitle>About LibraryHub</CardTitle>
-              <CardDescription>System information</CardDescription>
-            </CardHeader>
-            <CardContent>
-              <div className="grid gap-3 text-sm">
-                <div className="flex justify-between py-2 border-b border-gray-100 dark:border-gray-800">
-                  <span className="text-gray-600 dark:text-gray-400">Version</span>
-                  <span className="font-medium text-gray-900 dark:text-gray-100">1.0.0</span>
-                </div>
-                <div className="flex justify-between py-2 border-b border-gray-100 dark:border-gray-800">
-                  <span className="text-gray-600 dark:text-gray-400">Platform</span>
-                  <span className="font-medium text-gray-900 dark:text-gray-100">Next.js 16 with React 19</span>
-                </div>
-                <div className="flex justify-between py-2 border-b border-gray-100 dark:border-gray-800">
-                  <span className="text-gray-600 dark:text-gray-400">Database</span>
-                  <span className="font-medium text-gray-900 dark:text-gray-100">MongoDB</span>
-                </div>
-                <p className="pt-2 text-xs text-gray-500 dark:text-gray-400 leading-relaxed">
-                  LibraryHub is a comprehensive library sitting management system designed to help administrators efficiently manage students, fees, seats, and generate detailed reports.
-                </p>
-              </div>
-            </CardContent>
-          </Card>
-        </>
+            <Card className="border-slate-200 bg-white shadow-sm">
+              <CardHeader>
+                <CardTitle className="flex items-center gap-2 text-slate-950">
+                  <Building className="h-5 w-5 text-teal-700" />
+                  Library Setup
+                </CardTitle>
+                <CardDescription>Quick operating snapshot.</CardDescription>
+              </CardHeader>
+              <CardContent className="grid gap-3">
+                <ConfigTile icon={<Building className="h-4 w-4" />} label="Library" value={admin.libraryName || 'Your Library Hub'} tone="teal" />
+                <ConfigTile icon={<User className="h-4 w-4" />} label="Admin" value={admin.name || 'Not set'} tone="sky" />
+                <ConfigTile icon={<CircleDollarSign className="h-4 w-4" />} label="Fee Schedule" value="Monthly" tone="amber" />
+                <ConfigTile icon={<Clock3 className="h-4 w-4" />} label="Version" value="1.0.0" tone="slate" />
+              </CardContent>
+            </Card>
+          </aside>
+        </div>
       )}
     </div>
   );
+}
+
+function SettingsField({
+  icon,
+  label,
+  value,
+  helper,
+  isEditing,
+  children,
+}: {
+  icon: React.ReactNode;
+  label: string;
+  value?: string;
+  helper?: string;
+  isEditing: boolean;
+  children?: React.ReactNode;
+}) {
+  return (
+    <div className="space-y-2">
+      <label className="flex items-center gap-2 text-sm font-semibold text-slate-700">
+        <span className="text-slate-400">{icon}</span>
+        {label}
+      </label>
+      {isEditing && children ? (
+        children
+      ) : (
+        <div className="min-h-11 rounded-lg border border-slate-200 bg-slate-50 px-3 py-2.5 text-sm font-medium text-slate-900">
+          {value || 'Not set'}
+        </div>
+      )}
+      {helper && <p className="text-xs text-slate-500">{helper}</p>}
+    </div>
+  );
+}
+
+function PasswordField({
+  id,
+  label,
+  value,
+  onChange,
+  placeholder,
+}: {
+  id: string;
+  label: string;
+  value: string;
+  onChange: (value: string) => void;
+  placeholder: string;
+}) {
+  return (
+    <div className="space-y-2">
+      <label htmlFor={id} className="text-sm font-semibold text-slate-700">
+        {label}
+      </label>
+      <Input
+        id={id}
+        type="password"
+        value={value}
+        onChange={(e) => onChange(e.target.value)}
+        placeholder={placeholder}
+        className="h-11 border-slate-200"
+        required
+      />
+    </div>
+  );
+}
+
+function ConfigTile({
+  icon,
+  label,
+  value,
+  tone,
+}: {
+  icon: React.ReactNode;
+  label: string;
+  value: string;
+  tone: 'teal' | 'sky' | 'amber' | 'slate';
+}) {
+  const tones = {
+    teal: 'bg-teal-50 text-teal-700',
+    sky: 'bg-sky-50 text-sky-700',
+    amber: 'bg-amber-50 text-amber-700',
+    slate: 'bg-slate-100 text-slate-700',
+  };
+
+  return (
+    <div className="flex items-center gap-3 rounded-lg border border-slate-100 bg-slate-50/70 p-3">
+      <div className={`flex h-9 w-9 items-center justify-center rounded-lg ${tones[tone]}`}>{icon}</div>
+      <div className="min-w-0">
+        <p className="text-xs font-medium text-slate-500">{label}</p>
+        <p className="truncate text-sm font-semibold text-slate-950">{value}</p>
+      </div>
+    </div>
+  );
+}
+
+function getProfileCompletion(admin: Partial<Admin>) {
+  const fields = [admin.name, admin.email, admin.phone, admin.libraryName, admin.address];
+  const filled = fields.filter((field) => String(field || '').trim().length > 0).length;
+  return Math.round((filled / fields.length) * 100);
 }

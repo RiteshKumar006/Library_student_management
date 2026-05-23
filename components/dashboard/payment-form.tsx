@@ -8,6 +8,12 @@ import { Card, CardContent, CardHeader, CardTitle } from '@/components/ui/card';
 import { Alert, AlertDescription } from '@/components/ui/alert';
 import { AlertCircle, X, CheckCircle2 } from 'lucide-react';
 import { PAYMENT_METHODS } from '@/lib/constants';
+import {
+  addDays,
+  formatDateInput,
+  getCoveredBillingMonths,
+  getPaidTillDateForMonths,
+} from '@/lib/fee-calculation';
 
 interface PaymentFormProps {
   student: Student;
@@ -35,12 +41,12 @@ export function PaymentForm({
     [student.feePaidTillDate, student.nextDueDate]
   );
   const defaultPaidTillDate = useMemo(
-    () => getEndOfNextMonth(currentPaidTillDate),
+    () => getPaidTillDateForMonths(addDays(currentPaidTillDate, 1), 1),
     [currentPaidTillDate]
   );
   const [formData, setFormData] = useState({
     amount: student.monthlyFee,
-    paymentDate: new Date().toISOString().split('T')[0],
+    paymentDate: formatDateInput(new Date()),
     feePaidTillDate: formatDateInput(defaultPaidTillDate),
     paymentMethod: 'cash',
     notes: '',
@@ -87,7 +93,7 @@ export function PaymentForm({
   };
 
   const selectedPaidTillDate = useMemo(
-    () => (formData.feePaidTillDate ? new Date(formData.feePaidTillDate) : null),
+    () => (formData.feePaidTillDate ? parseDateInput(formData.feePaidTillDate) : null),
     [formData.feePaidTillDate]
   );
   const selectedMonths = useMemo(() => {
@@ -95,7 +101,7 @@ export function PaymentForm({
       return [];
     }
 
-    return getCoveredMonths(addDays(currentPaidTillDate, 1), selectedPaidTillDate).filter(
+    return getCoveredBillingMonths(addDays(currentPaidTillDate, 1), selectedPaidTillDate).filter(
       ({ month, year }) => !isMonthPaid(month, year)
     );
   }, [formData.feePaidTillDate, feeRecords, currentPaidTillDate]);
@@ -394,16 +400,6 @@ export function PaymentForm({
   );
 }
 
-function formatDateInput(date: Date) {
-  return date.toISOString().split('T')[0];
-}
-
-function addDays(date: Date, days: number) {
-  const nextDate = new Date(date);
-  nextDate.setDate(nextDate.getDate() + days);
-  return nextDate;
-}
-
 function getPaidTillDate(student: Student) {
   const paidTillDate = student.feePaidTillDate
     ? new Date(student.feePaidTillDate)
@@ -412,19 +408,7 @@ function getPaidTillDate(student: Student) {
   return paidTillDate;
 }
 
-function getEndOfNextMonth(date: Date) {
-  return new Date(date.getFullYear(), date.getMonth() + 2, 0);
-}
-
-function getCoveredMonths(startDate: Date, paidTillDate: Date) {
-  const months: { month: number; year: number }[] = [];
-  const cursor = new Date(startDate.getFullYear(), startDate.getMonth(), 1);
-  const end = new Date(paidTillDate.getFullYear(), paidTillDate.getMonth(), 1);
-
-  while (cursor <= end) {
-    months.push({ month: cursor.getMonth(), year: cursor.getFullYear() });
-    cursor.setMonth(cursor.getMonth() + 1);
-  }
-
-  return months;
+function parseDateInput(value: string) {
+  const [year, month, day] = value.split('-').map(Number);
+  return new Date(year, month - 1, day);
 }

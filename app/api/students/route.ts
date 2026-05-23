@@ -3,6 +3,12 @@ import { getDatabase } from '@/lib/db';
 import { getTokenFromRequest, verifyToken } from '@/lib/auth';
 import { Student, FeeRecord, ApiResponse } from '@/types';
 import { PAYMENT_METHODS } from '@/lib/constants';
+import {
+  getCoveredBillingCycles,
+  getDefaultFeePaidTillDate,
+  getNextDueDate,
+  toDateOnly,
+} from '@/lib/fee-calculation';
 
 function calculateStatus(nextDueDate: Date): 'active' | 'overdue' {
   const today = new Date();
@@ -10,36 +16,6 @@ function calculateStatus(nextDueDate: Date): 'active' | 'overdue' {
   const dueDate = new Date(nextDueDate);
   dueDate.setHours(0, 0, 0, 0);
   return today > dueDate ? 'overdue' : 'active';
-}
-
-function addDays(date: Date, days: number) {
-  const nextDate = new Date(date);
-  nextDate.setDate(nextDate.getDate() + days);
-  return nextDate;
-}
-
-function getDefaultFeePaidTillDate(joiningDate: Date, isInitialFeePaid: boolean) {
-  if (!isInitialFeePaid) {
-    return addDays(joiningDate, -1);
-  }
-
-  const paidTillDate = new Date(joiningDate);
-  paidTillDate.setMonth(paidTillDate.getMonth() + 1);
-  paidTillDate.setDate(paidTillDate.getDate() - 1);
-  return paidTillDate;
-}
-
-function getCoveredMonths(startDate: Date, paidTillDate: Date) {
-  const months: { month: number; year: number }[] = [];
-  const cursor = new Date(startDate.getFullYear(), startDate.getMonth(), 1);
-  const end = new Date(paidTillDate.getFullYear(), paidTillDate.getMonth(), 1);
-
-  while (cursor <= end) {
-    months.push({ month: cursor.getMonth(), year: cursor.getFullYear() });
-    cursor.setMonth(cursor.getMonth() + 1);
-  }
-
-  return months;
 }
 
 // GET - List all students with optional search/filter
@@ -143,7 +119,7 @@ export async function POST(request: NextRequest) {
       );
     }
 
-    const joining = new Date(joiningDate || new Date());
+    const joining = toDateOnly(joiningDate || new Date());
     const monthlyFeeAmount = parseFloat(monthlyFee);
     const normalizedAadharNumber = String(aadharNumber || '').replace(/\s/g, '');
     const hasManualPaidTillDate = Boolean(feePaidTillDate);
@@ -163,18 +139,25 @@ export async function POST(request: NextRequest) {
     }
 
     const paidTillDate = feePaidTillDate
-      ? new Date(feePaidTillDate)
+      ? toDateOnly(feePaidTillDate)
       : getDefaultFeePaidTillDate(joining, isInitialFeePaid);
-    paidTillDate.setHours(0, 0, 0, 0);
 
-    const nextDueDate = addDays(paidTillDate, 1);
-    const coveredMonths =
+    const nextDueDate = getNextDueDate(paidTillDate);
+    const coveredCycles =
       isInitialFeePaid && paidTillDate >= joining
         ? hasManualPaidTillDate
-          ? getCoveredMonths(joining, paidTillDate)
-          : [{ month: joining.getMonth(), year: joining.getFullYear() }]
+          ? getCoveredBillingCycles(joining, paidTillDate)
+          : [{ month: joining.getMonth(), year: joining.getFullYear(), dueDate: paidTillDate }]
         : [];
+    const coveredMonths = coveredCycles.map(({ month, year }) => ({ month, year }));
     const initialPaymentAmount = coveredMonths.length * monthlyFeeAmount;
+
+    if (isInitialFeePaid && paidTillDate >= joining && coveredMonths.length === 0) {
+      return NextResponse.json(
+        { success: false, message: 'Fees paid till date must cover at least one full billing month' } as ApiResponse,
+        { status: 400 }
+      );
+    }
 
     const newStudent = {
       name,
@@ -211,8 +194,7 @@ export async function POST(request: NextRequest) {
 
       const paymentId = payment.insertedId.toString();
 
-      for (const { month, year } of coveredMonths) {
-        const dueDate = new Date(year, month + 1, 0);
+      for (const { month, year, dueDate } of coveredCycles) {
         const feeRecord: FeeRecord = {
           studentId,
           month,
@@ -225,7 +207,7 @@ export async function POST(request: NextRequest) {
           createdAt: new Date(),
           updatedAt: new Date(),
         };
-        await feeRecordsCollection.insertOne(feeRecord);
+        await feeRecordsCollection.insertOne(feeRecord as any);
       }
     }
 

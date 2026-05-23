@@ -104,7 +104,12 @@ export default function StudentsPage() {
 
       if (response.ok) {
         setEditingStudent(undefined);
-        await fetchStudents();
+        const fetchedStudents = await fetchStudents();
+        const updatedStudent = fetchedStudents.find((item) => item._id === editingStudent._id);
+        if (updatedStudent) {
+          setSelectedStudent(updatedStudent);
+          await fetchPaymentHistory(updatedStudent._id!);
+        }
       } else {
         throw new Error(result.message || 'Failed to update student');
       }

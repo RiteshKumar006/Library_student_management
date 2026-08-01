@@ -14,6 +14,25 @@ import { ResponsiveContainer, AreaChart, Area, XAxis, YAxis, CartesianGrid, Tool
 
 type ExpenseCategory = Expense['category'];
 type ExpenseFilter = 'all' | ExpenseCategory;
+type DateRangeFilter = 'all' | 'today' | 'last7' | 'last30' | 'thisMonth' | 'lastMonth' | 'thisYear' | 'custom';
+
+const dateRanges: { value: DateRangeFilter; label: string }[] = [
+  { value: 'all', label: 'All time' },
+  { value: 'today', label: 'Today' },
+  { value: 'last7', label: 'Last 7 days' },
+  { value: 'last30', label: 'Last 30 days' },
+  { value: 'thisMonth', label: 'This month' },
+  { value: 'lastMonth', label: 'Last month' },
+  { value: 'thisYear', label: 'This year' },
+  { value: 'custom', label: 'Custom' },
+];
+
+// Midnight-normalised timestamp so date comparisons ignore the time part
+const startOfDay = (value: string | Date) => {
+  const date = new Date(value);
+  date.setHours(0, 0, 0, 0);
+  return date.getTime();
+};
 
 const categories: { value: ExpenseCategory; label: string; color: string }[] = [
   { value: 'rent', label: 'Rent', color: 'bg-red-100 text-red-700 border-red-200' },
@@ -50,6 +69,9 @@ export default function ExpensesPage() {
   const [filter, setFilter] = useState<ExpenseFilter>('all');
   const [searchQuery, setSearchQuery] = useState('');
   const [viewMode, setViewMode] = useState<'grid' | 'list'>('grid');
+  const [dateRange, setDateRange] = useState<DateRangeFilter>('all');
+  const [customFrom, setCustomFrom] = useState('');
+  const [customTo, setCustomTo] = useState('');
   
   // Edit modal state
   const [isEditModalOpen, setIsEditModalOpen] = useState(false);
@@ -58,13 +80,76 @@ export default function ExpensesPage() {
   const [isUpdating, setIsUpdating] = useState(false);
 
   const token = typeof window !== 'undefined' ? localStorage.getItem('authToken') : null;
-  const filteredExpenses =
-    filter === 'all' ? expenses : expenses.filter((expense) => expense.category === filter);
+
+  // Resolve the selected range into inclusive [from, to] day boundaries (null = open ended)
+  const dateBounds = useMemo(() => {
+    const today = new Date();
+    const year = today.getFullYear();
+    const month = today.getMonth();
+
+    switch (dateRange) {
+      case 'today':
+        return { from: startOfDay(today), to: startOfDay(today) };
+      case 'last7': {
+        const from = new Date(today);
+        from.setDate(from.getDate() - 6);
+        return { from: startOfDay(from), to: startOfDay(today) };
+      }
+      case 'last30': {
+        const from = new Date(today);
+        from.setDate(from.getDate() - 29);
+        return { from: startOfDay(from), to: startOfDay(today) };
+      }
+      case 'thisMonth':
+        return {
+          from: startOfDay(new Date(year, month, 1)),
+          to: startOfDay(new Date(year, month + 1, 0)),
+        };
+      case 'lastMonth':
+        return {
+          from: startOfDay(new Date(year, month - 1, 1)),
+          to: startOfDay(new Date(year, month, 0)),
+        };
+      case 'thisYear':
+        return {
+          from: startOfDay(new Date(year, 0, 1)),
+          to: startOfDay(new Date(year, 11, 31)),
+        };
+      case 'custom':
+        return {
+          from: customFrom ? startOfDay(`${customFrom}T00:00:00`) : null,
+          to: customTo ? startOfDay(`${customTo}T00:00:00`) : null,
+        };
+      default:
+        return { from: null, to: null };
+    }
+  }, [dateRange, customFrom, customTo]);
+
+  const isDateFilterActive =
+    dateRange !== 'all' && !(dateRange === 'custom' && !customFrom && !customTo);
+
+  const filteredExpenses = useMemo(() => {
+    return expenses.filter((expense) => {
+      if (filter !== 'all' && expense.category !== filter) return false;
+
+      const expenseDay = startOfDay(expense.expenseDate);
+      if (Number.isNaN(expenseDay)) return !isDateFilterActive;
+      if (dateBounds.from !== null && expenseDay < dateBounds.from) return false;
+      if (dateBounds.to !== null && expenseDay > dateBounds.to) return false;
+
+      return true;
+    });
+  }, [expenses, filter, dateBounds, isDateFilterActive]);
 
   // Filter with search
   const searchedFilteredExpenses = filteredExpenses.filter(expense =>
     expense.title.toLowerCase().includes(searchQuery.toLowerCase()) ||
     expense.category.toLowerCase().includes(searchQuery.toLowerCase())
+  );
+
+  const visibleTotal = useMemo(
+    () => searchedFilteredExpenses.reduce((sum, expense) => sum + Number(expense.amount || 0), 0),
+    [searchedFilteredExpenses]
   );
 
   const totalExpense = useMemo(
@@ -192,6 +277,12 @@ export default function ExpensesPage() {
     } catch (err) {
       setError(err instanceof Error ? err.message : 'Failed to delete expense');
     }
+  };
+
+  const clearDateFilter = () => {
+    setDateRange('all');
+    setCustomFrom('');
+    setCustomTo('');
   };
 
   const openEditModal = (expense: Expense) => {
@@ -507,6 +598,9 @@ export default function ExpensesPage() {
                 <CardTitle className="text-lg">Expense History</CardTitle>
                 <p className="text-sm text-gray-500 dark:text-gray-400 mt-0.5">
                   {searchedFilteredExpenses.length} of {expenses.length} records
+                  <span className="text-emerald-600 dark:text-emerald-400 font-medium">
+                    {' '}• ₹{visibleTotal.toLocaleString('en-IN')}
+                  </span>
                 </p>
               </div>
               <div className="flex items-center gap-2">
@@ -563,6 +657,69 @@ export default function ExpensesPage() {
                 </button>
               ))}
             </div>
+
+            {/* Date Filters */}
+            <div className="mt-3 pt-3 border-t border-gray-100 dark:border-gray-800">
+              <div className="flex flex-wrap items-center gap-1.5">
+                <span className="mr-0.5 flex items-center gap-1 text-[11px] font-semibold uppercase tracking-wide text-gray-400 dark:text-gray-500">
+                  <CalendarDays className="w-3.5 h-3.5" />
+                  Date
+                </span>
+                {dateRanges.map((range) => (
+                  <button
+                    key={range.value}
+                    onClick={() => setDateRange(range.value)}
+                    className={`px-2.5 py-1 text-xs font-medium rounded-full border transition-all ${
+                      dateRange === range.value
+                        ? 'bg-sky-50 dark:bg-sky-950/30 border-sky-500 text-sky-700 dark:text-sky-300'
+                        : 'bg-white dark:bg-gray-900 border-gray-200 dark:border-gray-700 text-gray-600 dark:text-gray-400 hover:border-gray-300'
+                    }`}
+                  >
+                    {range.label}
+                  </button>
+                ))}
+                {isDateFilterActive && (
+                  <button
+                    onClick={clearDateFilter}
+                    className="flex items-center gap-1 rounded-full px-2 py-1 text-xs font-medium text-gray-500 transition-colors hover:bg-gray-100 hover:text-gray-700 dark:hover:bg-gray-800 dark:hover:text-gray-300"
+                  >
+                    <X className="w-3 h-3" />
+                    Clear
+                  </button>
+                )}
+              </div>
+
+              {dateRange === 'custom' && (
+                <div className="mt-2 flex flex-wrap items-end gap-2">
+                  <div className="space-y-1">
+                    <label htmlFor="filter-from" className="block text-[11px] font-semibold text-gray-500 dark:text-gray-400">
+                      From
+                    </label>
+                    <Input
+                      id="filter-from"
+                      type="date"
+                      value={customFrom}
+                      max={customTo || undefined}
+                      onChange={(event) => setCustomFrom(event.target.value)}
+                      className="h-8 w-full text-xs sm:w-40"
+                    />
+                  </div>
+                  <div className="space-y-1">
+                    <label htmlFor="filter-to" className="block text-[11px] font-semibold text-gray-500 dark:text-gray-400">
+                      To
+                    </label>
+                    <Input
+                      id="filter-to"
+                      type="date"
+                      value={customTo}
+                      min={customFrom || undefined}
+                      onChange={(event) => setCustomTo(event.target.value)}
+                      className="h-8 w-full text-xs sm:w-40"
+                    />
+                  </div>
+                </div>
+              )}
+            </div>
           </CardHeader>
           <CardContent className="pt-4">
             {isLoading ? (
@@ -576,16 +733,23 @@ export default function ExpensesPage() {
               <div className="py-12 text-center">
                 <ReceiptText className="w-12 h-12 mx-auto mb-3 text-gray-300 dark:text-gray-600" />
                 <p className="text-gray-600 dark:text-gray-400 text-sm">
-                  {searchQuery ? 'No expenses match your search' : 'No expenses recorded yet.'}
+                  {isDateFilterActive
+                    ? 'No expenses in the selected date range'
+                    : searchQuery
+                      ? 'No expenses match your search'
+                      : 'No expenses recorded yet.'}
                 </p>
-                {searchQuery && (
+                {(searchQuery || isDateFilterActive) && (
                   <Button
                     variant="link"
                     size="sm"
-                    onClick={() => setSearchQuery('')}
+                    onClick={() => {
+                      setSearchQuery('');
+                      clearDateFilter();
+                    }}
                     className="mt-2 text-xs"
                   >
-                    Clear search
+                    Clear filters
                   </Button>
                 )}
               </div>

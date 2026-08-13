@@ -29,8 +29,10 @@ export interface Student {
   name: string;
   phone: string;
   seatNumber: number;
+  shift?: 'full' | 'morning' | 'afternoon' | 'evening'; // part-time students share a seat across shifts
   joiningDate: Date;
-  monthlyFee: number;
+  monthlyFee: number; // effective rate actually charged per month (shift-adjusted)
+  baseMonthlyFee?: number; // full-day rate this student's fee is derived from
   feePaidTillDate?: Date;
   nextDueDate: Date;
   status: 'active' | 'inactive' | 'overdue';
@@ -67,11 +69,23 @@ export interface Expense {
   updatedAt?: Date;
 }
 
+export interface SeatOccupant {
+  _id: string;
+  name: string;
+  phone: string;
+  status: string;
+  shift: 'full' | 'morning' | 'afternoon' | 'evening';
+}
+
 export interface Seat {
   _id?: string;
   seatNumber: number;
   isAvailable: boolean;
   assignedStudentId?: string;
+  occupants?: SeatOccupant[]; // a seat can hold several students on non-overlapping shifts
+  takenShifts?: ('full' | 'morning' | 'afternoon' | 'evening')[];
+  openShifts?: ('full' | 'morning' | 'afternoon' | 'evening')[];
+  isFullyBooked?: boolean;
   createdAt?: Date;
   updatedAt?: Date;
 }

@@ -5,6 +5,7 @@ import type { ReactNode } from 'react';
 import { Student, Payment, ApiResponse } from '@/types';
 import { StudentTable } from '@/components/dashboard/student-table';
 import { StudentForm } from '@/components/dashboard/student-form';
+import { getShiftMeta } from '@/lib/shifts';
 import { Button } from '@/components/ui/button';
 import { Input } from '@/components/ui/input';
 import { Card, CardContent, CardHeader, CardTitle } from '@/components/ui/card';
@@ -497,6 +498,12 @@ function StudentDetails({
               <UserRound size={16} className="text-blue-600" />
               Seat {student.seatNumber}
             </span>
+            <span
+              className={`inline-flex items-center gap-2 rounded-md border px-3 py-1 ${getShiftMeta(student.shift).badge}`}
+            >
+              <Clock size={14} />
+              {getShiftMeta(student.shift).label} • {getShiftMeta(student.shift).time}
+            </span>
             <span className="inline-flex items-center gap-2 bg-white px-3 py-1 rounded-md text-xs">
               Admitted by <span className="font-medium">{student.admittedBy || 'N/A'}</span>
             </span>
@@ -566,6 +573,10 @@ function StudentDetails({
               <InfoRow label="Phone" value={student.phone} />
               <InfoRow label="Parent Phone" value={student.parentPhone || 'Not added'} />
               <InfoRow label="Aadhaar" value={student.aadharNumber || 'Not added'} />
+              <InfoRow
+                label="Seat & Hours"
+                value={`Seat ${student.seatNumber ?? '-'} • ${getShiftMeta(student.shift).label} (${getShiftMeta(student.shift).time})`}
+              />
               <InfoRow label="Joining Date" value={new Date(student.joiningDate).toLocaleDateString('en-IN')} />
               <InfoRow label="Fees Paid Till" value={new Date(feePaidTillDate).toLocaleDateString('en-IN')} />
               <InfoRow label="Monthly Fee" value={`₹${student.monthlyFee}`} />

@@ -6,8 +6,9 @@ import { Button } from '@/components/ui/button';
 import { Input } from '@/components/ui/input';
 import { Card, CardContent, CardHeader, CardTitle } from '@/components/ui/card';
 import { Alert, AlertDescription } from '@/components/ui/alert';
-import { AlertCircle, Upload, X, User, Phone, Users, Calendar, DollarSign, CreditCard, Check, ArrowRight } from 'lucide-react';
+import { AlertCircle, Upload, X, User, Phone, Users, Calendar, DollarSign, CreditCard, Check, ArrowRight, Clock } from 'lucide-react';
 import { PAYMENT_METHODS } from '@/lib/constants';
+import { PART_TIME_SHIFTS, Shift, getShiftMeta, normalizeShift, suggestedShiftFee } from '@/lib/shifts';
 
 interface StudentFormProps {
   student?: Student;
@@ -21,10 +22,15 @@ export function StudentForm({ student, onSubmit, onCancel, isLoading }: StudentF
     name: student?.name || '',
     phone: student?.phone || '',
     seatNumber: student?.seatNumber || '',
+    shift: normalizeShift(student?.shift),
     joiningDate: student?.joiningDate
       ? new Date(student.joiningDate).toISOString().split('T')[0]
       : new Date().toISOString().split('T')[0],
-    monthlyFee: student?.monthlyFee || '',
+    // Full-day rate the fee is derived from
+    monthlyFee: student?.baseMonthlyFee || student?.monthlyFee || '',
+    // Effective rate charged while the student is on a part-time shift
+    partTimeFee:
+      student && normalizeShift(student.shift) !== 'full' ? student.monthlyFee || '' : '',
     feePaidTillDate: student?.feePaidTillDate
       ? new Date(student.feePaidTillDate).toISOString().split('T')[0]
       : '',
@@ -41,6 +47,10 @@ export function StudentForm({ student, onSubmit, onCancel, isLoading }: StudentF
   const [seats, setSeats] = useState<Seat[]>([]);
   const [isSeatsLoading, setIsSeatsLoading] = useState(true);
   const [dragActive, setDragActive] = useState(false);
+  // Once the admin edits the part-time fee we stop auto-suggesting over it
+  const [feeTouched, setFeeTouched] = useState(
+    Boolean(student && normalizeShift(student.shift) !== 'full')
+  );
 
   useEffect(() => {
     const fetchSeats = async () => {
@@ -71,9 +81,53 @@ export function StudentForm({ student, onSubmit, onCancel, isLoading }: StudentF
   }, []);
 
   const currentSeatNumber = student?.seatNumber ? Number(student.seatNumber) : null;
-  const availableSeats = seats.filter(
-    (seat) => seat.isAvailable || seat.seatNumber === currentSeatNumber
-  );
+  const selectedShift = formData.shift as Shift;
+  const isPartTime = selectedShift !== 'full';
+
+  // Only seats whose chosen shift is still open (plus the student's own seat)
+  const availableSeats = seats.filter((seat) => {
+    if (seat.seatNumber === currentSeatNumber) return true;
+    const openShifts = seat.openShifts || (seat.isAvailable ? ['full', 'morning', 'afternoon', 'evening'] : []);
+    return openShifts.includes(selectedShift);
+  });
+
+  const seatMatesFor = (seatNumber: number) =>
+    (seats.find((seat) => seat.seatNumber === seatNumber)?.occupants || []).filter(
+      (occupant) => occupant._id !== student?._id
+    );
+
+  const handleShiftChange = (shift: Shift) => {
+    setError('');
+    setFormData((prev) => {
+      // Drop the seat if it isn't free for the newly picked hours
+      const seat = seats.find((item) => item.seatNumber === Number(prev.seatNumber));
+      const stillValid =
+        !prev.seatNumber ||
+        Number(prev.seatNumber) === currentSeatNumber ||
+        (seat?.openShifts || []).includes(shift);
+
+      // Re-suggest the part-time fee unless the admin typed their own figure
+      const partTimeFee =
+        shift === 'full'
+          ? ''
+          : feeTouched
+            ? prev.partTimeFee
+            : suggestedShiftFee(Number(prev.monthlyFee || 0), shift);
+
+      return {
+        ...prev,
+        shift,
+        partTimeFee,
+        seatNumber: stillValid ? prev.seatNumber : '',
+      };
+    });
+  };
+
+  // The amount this student will actually be billed each month
+  const effectiveMonthlyFee = isPartTime
+    ? Number(formData.partTimeFee || 0)
+    : Number(formData.monthlyFee || 0);
+  const suggestedFee = suggestedShiftFee(Number(formData.monthlyFee || 0), selectedShift);
 
   const handleChange = (e: React.ChangeEvent<HTMLInputElement | HTMLSelectElement>) => {
     const { name, value } = e.target;
@@ -159,6 +213,11 @@ export function StudentForm({ student, onSubmit, onCancel, isLoading }: StudentF
       return;
     }
 
+    if (isPartTime && !(Number(formData.partTimeFee) > 0)) {
+      setError(`Enter the monthly fee for the ${getShiftMeta(selectedShift).label} shift`);
+      return;
+    }
+
     const normalizedAadhar = formData.aadharNumber.replace(/\s/g, '');
     if (normalizedAadhar && !/^\d{12}$/.test(normalizedAadhar)) {
       setError('Aadhaar number must be 12 digits');
@@ -166,7 +225,13 @@ export function StudentForm({ student, onSubmit, onCancel, isLoading }: StudentF
     }
 
     try {
-      await onSubmit({ ...formData, aadharNumber: normalizedAadhar });
+      await onSubmit({
+        ...formData,
+        aadharNumber: normalizedAadhar,
+        // monthlyFee is the full-day rate; the server derives what is actually billed
+        baseMonthlyFee: formData.monthlyFee,
+        partTimeFee: isPartTime ? formData.partTimeFee : '',
+      });
       setSuccess(true);
     } catch (err) {
       setError(err instanceof Error ? err.message : 'An error occurred');
@@ -177,11 +242,20 @@ export function StudentForm({ student, onSubmit, onCancel, isLoading }: StudentF
     <Card className="border-0 shadow-lg">
       {/* Header */}
       <CardHeader className="bg-gradient-to-r from-blue-600 to-indigo-600 text-white pb-6 flex flex-row items-center justify-between space-y-0 rounded-t-lg">
-        <div>
-          <CardTitle className="text-white text-2xl">{student ? '✏️ Edit Student' : '➕ Add New Student'}</CardTitle>
-          <p className="text-blue-100 text-sm mt-1">{student ? 'Update student information' : 'Register a new student to the library'}</p>
+        <div className="min-w-0">
+          <CardTitle className="truncate text-xl text-white sm:text-2xl">
+            {student ? '✏️ Edit Student' : '➕ Add New Student'}
+          </CardTitle>
+          <p className="mt-1 text-sm text-blue-100">
+            {student ? 'Update student information' : 'Register a new student to the library'}
+          </p>
         </div>
-        <button onClick={onCancel} className="p-2 hover:bg-white hover:bg-opacity-20 rounded-full transition-all">
+        <button
+          type="button"
+          onClick={onCancel}
+          aria-label="Close"
+          className="shrink-0 rounded-full p-2 transition-all hover:bg-white/20"
+        >
           <X size={24} />
         </button>
       </CardHeader>
@@ -265,7 +339,73 @@ export function StudentForm({ student, onSubmit, onCancel, isLoading }: StudentF
           </FormSection>
 
           {/* Seat & Schedule */}
-          <FormSection title="Seat & Schedule" icon={<Calendar size={18} />} description="Assign seat and enrollment date">
+          <FormSection title="Seat & Schedule" icon={<Calendar size={18} />} description="Assign seat, hours and enrollment date">
+            {/* Full day vs part-time toggle */}
+            <div className="mb-4 rounded-lg border-2 border-gray-200 bg-white p-4">
+              <div className="flex items-start justify-between gap-4">
+                <div className="flex min-w-0 flex-1 items-start gap-2">
+                  <div className="shrink-0 rounded-lg bg-blue-100 p-2 text-blue-600">
+                    <Clock size={16} />
+                  </div>
+                  <div className="min-w-0">
+                    <p className="text-sm font-medium text-gray-900">Part-time seat sharing</p>
+                    <p className="text-xs text-gray-600">
+                      Turn on if the student attends only for a few hours, so the same seat can be
+                      reused by someone in another shift.
+                    </p>
+                  </div>
+                </div>
+
+                <button
+                  type="button"
+                  role="switch"
+                  aria-checked={isPartTime}
+                  aria-label="Part-time seat sharing"
+                  disabled={isLoading}
+                  onClick={() => handleShiftChange(isPartTime ? 'full' : 'morning')}
+                  className={`relative mt-0.5 inline-block h-7 w-14 shrink-0 cursor-pointer rounded-full border-0 p-0 transition-colors focus:outline-none focus-visible:ring-2 focus-visible:ring-blue-500 focus-visible:ring-offset-2 disabled:cursor-not-allowed disabled:opacity-50 ${
+                    isPartTime ? 'bg-blue-600' : 'bg-gray-300'
+                  }`}
+                >
+                  <span
+                    className={`absolute left-1 top-1 h-5 w-5 rounded-full bg-white shadow transition-transform duration-200 ${
+                      isPartTime ? 'translate-x-7' : 'translate-x-0'
+                    }`}
+                  />
+                </button>
+              </div>
+
+              {isPartTime ? (
+                <div className="mt-4 space-y-2">
+                  <p className="text-xs font-semibold text-gray-700">Select shift</p>
+                  <div className="grid grid-cols-1 gap-2 sm:grid-cols-3">
+                    {PART_TIME_SHIFTS.map((shift) => (
+                      <button
+                        key={shift.value}
+                        type="button"
+                        disabled={isLoading}
+                        onClick={() => handleShiftChange(shift.value)}
+                        className={`rounded-lg border-2 p-3 text-left transition-all ${
+                          selectedShift === shift.value
+                            ? 'border-blue-500 bg-blue-50'
+                            : 'border-gray-200 hover:border-gray-300'
+                        }`}
+                      >
+                        <span className="text-sm font-medium">
+                          {shift.icon} {shift.label}
+                        </span>
+                        <p className="mt-0.5 text-xs text-gray-600">{shift.time}</p>
+                      </button>
+                    ))}
+                  </div>
+                </div>
+              ) : (
+                <p className="mt-3 rounded-md bg-gray-50 px-3 py-2 text-xs text-gray-600">
+                  ☀️ Full Day — seat is reserved all day and cannot be shared.
+                </p>
+              )}
+            </div>
+
             <div className="grid grid-cols-1 md:grid-cols-2 gap-4">
               <div className="space-y-2">
                 <label className="text-sm font-medium text-gray-700 flex items-center gap-2">
@@ -280,13 +420,31 @@ export function StudentForm({ student, onSubmit, onCancel, isLoading }: StudentF
                   required
                   className="w-full px-4 py-2 border-2 border-gray-200 rounded-lg shadow-sm focus:outline-none focus:ring-2 focus:ring-blue-500 focus:border-transparent transition-all"
                 >
-                  <option value="">{isSeatsLoading ? 'Loading seats...' : `Select a seat (${availableSeats.length} available)`}</option>
-                  {availableSeats.map((seat) => (
-                    <option key={seat.seatNumber} value={seat.seatNumber}>
-                      Seat {seat.seatNumber} {!seat.isAvailable && '(Current)'}
-                    </option>
-                  ))}
+                  <option value="">
+                    {isSeatsLoading
+                      ? 'Loading seats...'
+                      : `Select a seat (${availableSeats.length} free for ${getShiftMeta(selectedShift).label})`}
+                  </option>
+                  {availableSeats.map((seat) => {
+                    const mates = seatMatesFor(seat.seatNumber);
+                    return (
+                      <option key={seat.seatNumber} value={seat.seatNumber}>
+                        Seat {seat.seatNumber}
+                        {seat.seatNumber === currentSeatNumber && ' (Current)'}
+                        {mates.length > 0 &&
+                          ` — shared with ${mates
+                            .map((mate) => `${mate.name} (${getShiftMeta(mate.shift).label})`)
+                            .join(', ')}`}
+                      </option>
+                    );
+                  })}
                 </select>
+                {!isSeatsLoading && availableSeats.length === 0 && (
+                  <p className="text-xs text-red-600">
+                    No seat is free for the {getShiftMeta(selectedShift).label} shift. Try another
+                    shift.
+                  </p>
+                )}
               </div>
               <FormField
                 label="Joining Date"
@@ -303,19 +461,83 @@ export function StudentForm({ student, onSubmit, onCancel, isLoading }: StudentF
 
           {/* Fee Information */}
           <FormSection title="Fee Information" icon={<DollarSign size={18} />} description="Monthly fee and paid-through date">
+            {isPartTime && (
+              <div className="mb-4 space-y-3 rounded-lg border-2 border-amber-200 bg-amber-50 p-4">
+                <div className="grid grid-cols-1 gap-4 md:grid-cols-2">
+                  <FormField
+                    label="Full Day Fee (₹)"
+                    name="monthlyFee"
+                    type="number"
+                    step="0.01"
+                    placeholder="Enter amount"
+                    value={formData.monthlyFee}
+                    onChange={handleChange}
+                    disabled={isLoading}
+                    required
+                    icon={<DollarSign size={16} />}
+                  />
+                  <div className="space-y-2">
+                    <label htmlFor="partTimeFee" className="flex items-center gap-2 text-sm font-medium text-gray-700">
+                      <DollarSign size={16} className="text-gray-500" />
+                      {getShiftMeta(selectedShift).label} Fee (₹)
+                      <span className="text-red-500">*</span>
+                    </label>
+                    <Input
+                      id="partTimeFee"
+                      name="partTimeFee"
+                      type="number"
+                      step="0.01"
+                      min="1"
+                      value={formData.partTimeFee}
+                      onChange={(event) => {
+                        setFeeTouched(true);
+                        handleChange(event);
+                      }}
+                      disabled={isLoading}
+                      required
+                      className="border-2 border-amber-300 transition-all focus:border-amber-500 focus:ring-2 focus:ring-amber-200"
+                    />
+                  </div>
+                </div>
+                <div className="flex flex-wrap items-center justify-between gap-2 border-t border-amber-200 pt-2">
+                  <p className="text-xs text-amber-800">
+                    This student is billed <strong>₹{effectiveMonthlyFee.toLocaleString('en-IN')}/month</strong>{' '}
+                    for the {getShiftMeta(selectedShift).label} shift — not the full-day rate.
+                  </p>
+                  {Number(formData.partTimeFee) !== suggestedFee && suggestedFee > 0 && (
+                    <button
+                      type="button"
+                      onClick={() => {
+                        setFeeTouched(false);
+                        setFormData((prev) => ({
+                          ...prev,
+                          partTimeFee: suggestedShiftFee(Number(prev.monthlyFee || 0), selectedShift),
+                        }));
+                      }}
+                      className="shrink-0 rounded-md border border-amber-300 bg-white px-2 py-1 text-xs font-medium text-amber-700 hover:bg-amber-100"
+                    >
+                      Use half (₹{suggestedFee.toLocaleString('en-IN')})
+                    </button>
+                  )}
+                </div>
+              </div>
+            )}
+
             <div className="grid grid-cols-1 md:grid-cols-2 gap-4">
-              <FormField
-                label="Monthly Fee (₹)"
-                name="monthlyFee"
-                type="number"
-                step="0.01"
-                placeholder="Enter amount"
-                value={formData.monthlyFee}
-                onChange={handleChange}
-                disabled={isLoading}
-                required
-                icon={<DollarSign size={16} />}
-              />
+              {!isPartTime && (
+                <FormField
+                  label="Monthly Fee (₹)"
+                  name="monthlyFee"
+                  type="number"
+                  step="0.01"
+                  placeholder="Enter amount"
+                  value={formData.monthlyFee}
+                  onChange={handleChange}
+                  disabled={isLoading}
+                  required
+                  icon={<DollarSign size={16} />}
+                />
+              )}
               <FormField
                 label="Fees Paid Till Date"
                 name="feePaidTillDate"
@@ -342,11 +564,11 @@ export function StudentForm({ student, onSubmit, onCancel, isLoading }: StudentF
           {!student && (
             <FormSection title="Initial Payment" icon={<CreditCard size={18} />} description="First month fee payment">
               <div className="space-y-4">
-                <div className="flex gap-3">
+                <div className="grid grid-cols-1 gap-3 sm:grid-cols-2">
                   {['paid', 'pending'].map((status) => (
                     <label
                       key={status}
-                      className={`flex-1 p-4 border-2 rounded-lg cursor-pointer transition-all ${
+                      className={`cursor-pointer rounded-lg border-2 p-4 transition-all ${
                         formData.initialFeeStatus === status
                           ? 'border-blue-500 bg-blue-50'
                           : 'border-gray-200 hover:border-gray-300'
@@ -358,12 +580,12 @@ export function StudentForm({ student, onSubmit, onCancel, isLoading }: StudentF
                         value={status}
                         checked={formData.initialFeeStatus === status}
                         onChange={handleChange}
-                        className="mr-2"
+                        className="sr-only"
                       />
                       <span className="font-medium">
                         {status === 'paid' ? '💳 Paid Now' : '⏳ Not Paid Yet'}
                       </span>
-                      <p className="text-xs text-gray-600 mt-1">
+                      <p className="mt-1 text-xs text-gray-600">
                         {status === 'paid' ? 'Record payment on enrollment' : 'Collect later'}
                       </p>
                     </label>
@@ -392,7 +614,7 @@ export function StudentForm({ student, onSubmit, onCancel, isLoading }: StudentF
                             value={method}
                             checked={formData.paymentMethod === method}
                             onChange={handleChange}
-                            className="hidden"
+                            className="sr-only"
                           />
                           <span className="text-sm font-medium capitalize">
                             {method === 'cash' && '💵'}
@@ -412,7 +634,13 @@ export function StudentForm({ student, onSubmit, onCancel, isLoading }: StudentF
 
           {/* Action Buttons */}
           <div className="flex justify-end gap-3 pt-6 border-t">
-            <Button variant="outline" onClick={onCancel} disabled={isLoading} className="px-6">
+            <Button
+              type="button"
+              variant="outline"
+              onClick={onCancel}
+              disabled={isLoading}
+              className="px-6"
+            >
               Cancel
             </Button>
             <Button

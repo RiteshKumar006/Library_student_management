@@ -3,6 +3,7 @@ import { getDatabase } from '@/lib/db';
 import { getTokenFromRequest, verifyToken } from '@/lib/auth';
 import { Seat, ApiResponse } from '@/types';
 import { SEAT_RANGE } from '@/lib/constants';
+import { availableShifts, normalizeShift } from '@/lib/shifts';
 
 // GET - List all seats with availability
 export async function GET(request: NextRequest) {
@@ -39,41 +40,53 @@ export async function GET(request: NextRequest) {
       studentsCollection
         .find(
           { seatNumber: { $type: 'number' } },
-          { projection: { name: 1, phone: 1, seatNumber: 1, status: 1 } }
+          { projection: { name: 1, phone: 1, seatNumber: 1, status: 1, shift: 1 } }
         )
         .toArray(),
     ]);
 
-    const studentsBySeat = new Map(
-      assignedStudents.map((student: any) => [
-        student.seatNumber,
-        {
-          _id: student._id.toString(),
-          name: student.name,
-          phone: student.phone,
-          status: student.status,
-        },
-      ])
-    );
+    // A seat can hold several students as long as their shifts don't overlap
+    const studentsBySeat = new Map<number, any[]>();
+    for (const student of assignedStudents as any[]) {
+      const occupants = studentsBySeat.get(student.seatNumber) || [];
+      occupants.push({
+        _id: student._id.toString(),
+        name: student.name,
+        phone: student.phone,
+        status: student.status,
+        shift: normalizeShift(student.shift),
+      });
+      studentsBySeat.set(student.seatNumber, occupants);
+    }
 
     const enrichedSeats = seats.map((seat: any) => {
-      const assignedStudent = studentsBySeat.get(seat.seatNumber);
+      const occupants = studentsBySeat.get(seat.seatNumber) || [];
+      const takenShifts = occupants.map((occupant) => occupant.shift);
+      const openShifts = availableShifts(takenShifts).map((shift) => shift.value);
 
       return {
         ...seat,
         _id: seat._id.toString(),
-        isAvailable: !assignedStudent,
-        assignedStudentId: assignedStudent?._id || null,
-        assignedStudent: assignedStudent || null,
+        // isAvailable keeps its original meaning: nobody is on this seat at all
+        isAvailable: occupants.length === 0,
+        // partially booked = some shifts taken, but others still bookable
+        isPartiallyBooked: occupants.length > 0 && openShifts.length > 0,
+        isFullyBooked: openShifts.length === 0,
+        occupants,
+        takenShifts,
+        openShifts,
+        assignedStudentId: occupants[0]?._id || null,
+        assignedStudent: occupants[0] || null,
       };
     });
 
     const availableCount = enrichedSeats.filter((seat) => seat.isAvailable).length;
+    const partiallyBookedCount = enrichedSeats.filter((seat) => seat.isPartiallyBooked).length;
 
     return NextResponse.json(
       {
         success: true,
-        data: { seats: enrichedSeats, availableCount, totalSeats: SEAT_RANGE },
+        data: { seats: enrichedSeats, availableCount, partiallyBookedCount, totalSeats: SEAT_RANGE },
         message: 'Seats fetched successfully',
       } as ApiResponse,
       { status: 200 }

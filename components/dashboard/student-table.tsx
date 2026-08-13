@@ -1,4 +1,5 @@
 import { Student } from '@/types';
+import { getShiftMeta } from '@/lib/shifts';
 import { Button } from '@/components/ui/button';
 import { AlertTriangle, Edit2, Trash2, CheckCircle2, Clock, Eye } from 'lucide-react';
 
@@ -88,7 +89,17 @@ export function StudentTable({ students, onView, onEdit, onDelete, isLoading }: 
                   </div>
                 </td>
                 <td className="px-6 py-4 text-gray-700">{student.phone}</td>
-                <td className="px-6 py-4 text-gray-700 font-medium">{student.seatNumber || '-'}</td>
+                <td className="px-6 py-4">
+                  <p className="font-medium text-gray-700">{student.seatNumber || '-'}</p>
+                  {student.seatNumber && (
+                    <span
+                      className={`mt-1 inline-block rounded-full border px-2 py-0.5 text-[10px] font-medium ${getShiftMeta(student.shift).badge}`}
+                      title={getShiftMeta(student.shift).time}
+                    >
+                      {getShiftMeta(student.shift).icon} {getShiftMeta(student.shift).label}
+                    </span>
+                  )}
+                </td>
                 <td className="px-6 py-4 text-center">
                   <div className={dueDateColor}>
                     {new Date(paidTillDate).toLocaleDateString('en-IN')}

@@ -9,6 +9,8 @@ import {
   getNextDueDate,
   toDateOnly,
 } from '@/lib/fee-calculation';
+import { normalizeShift, suggestedShiftFee } from '@/lib/shifts';
+import { findSeatShiftConflict } from '@/lib/seat-allocation';
 
 function calculateStatus(nextDueDate: Date): 'active' | 'overdue' {
   const today = new Date();
@@ -131,12 +133,54 @@ export async function PUT(
       updatedAt: new Date(),
     };
 
+    const nextShift = normalizeShift(body.shift ?? currentStudent.shift);
+    const nextSeatNumber = body.seatNumber
+      ? parseInt(body.seatNumber)
+      : currentStudent.seatNumber;
+
+    // Re-check sharing rules whenever the seat or the hours change
+    if (nextSeatNumber) {
+      const conflict = await findSeatShiftConflict(
+        studentsCollection,
+        nextSeatNumber,
+        nextShift,
+        id
+      );
+      if (conflict) {
+        return NextResponse.json(
+          { success: false, message: conflict } as ApiResponse,
+          { status: 400 }
+        );
+      }
+    }
+
+    updateData.shift = nextShift;
+
     if (body.seatNumber) {
       updateData.seatNumber = parseInt(body.seatNumber);
     }
 
-    if (body.monthlyFee) {
-      updateData.monthlyFee = parseFloat(body.monthlyFee);
+    // monthlyFee from the form is the full-day rate; part-time students are
+    // billed their shift rate from here on. Past months keep the rate they were
+    // charged at (fee records + payments are never repriced).
+    if (body.monthlyFee || body.baseMonthlyFee || body.partTimeFee) {
+      const baseFee = parseFloat(
+        body.baseMonthlyFee ?? body.monthlyFee ?? currentStudent.baseMonthlyFee ?? currentStudent.monthlyFee
+      );
+      const partTimeFee = parseFloat(body.partTimeFee);
+      const effectiveFee =
+        nextShift !== 'full'
+          ? Number.isFinite(partTimeFee) && partTimeFee > 0
+            ? partTimeFee
+            : suggestedShiftFee(baseFee, nextShift)
+          : baseFee;
+
+      if (Number.isFinite(baseFee) && baseFee > 0) {
+        updateData.baseMonthlyFee = baseFee;
+      }
+      if (Number.isFinite(effectiveFee) && effectiveFee > 0) {
+        updateData.monthlyFee = effectiveFee;
+      }
     }
 
     if (body.joiningDate) {
@@ -150,6 +194,14 @@ export async function PUT(
       const coveredMonths =
         feePaidTillDate >= joiningDate ? getCoveredBillingMonths(joiningDate, feePaidTillDate) : [];
 
+      // Each month keeps the amount it was actually billed at, so switching a
+      // student between full-day and part-time never reprices their history.
+      // The current rate applies only to months that were never billed before.
+      const feeRecords = await db
+        .collection('feeRecords')
+        .find({ studentId: id })
+        .toArray();
+
       updateData.feePaidTillDate = feePaidTillDate;
       updateData.nextDueDate = getNextDueDate(feePaidTillDate);
       updateData.paidMonths = coveredMonths.map(({ month, year }) => ({
@@ -157,7 +209,12 @@ export async function PUT(
         year,
         paidDate: currentStudent.joiningDate,
       }));
-      updateData.totalFeesCollected = coveredMonths.length * monthlyFee;
+      updateData.totalFeesCollected = coveredMonths.reduce((sum, { month, year }) => {
+        const billed = feeRecords.find(
+          (record: any) => record.month === month && record.year === year
+        );
+        return sum + Number(billed ? billed.amount : monthlyFee);
+      }, 0);
     } else if (
       body.joiningDate &&
       new Date(body.joiningDate).toDateString() !== new Date(currentStudent.joiningDate).toDateString()

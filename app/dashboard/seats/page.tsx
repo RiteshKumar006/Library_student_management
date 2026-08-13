@@ -2,6 +2,7 @@
 
 import { useEffect, useState } from 'react';
 import { Seat } from '@/types';
+import { getShiftMeta } from '@/lib/shifts';
 import { Card, CardContent, CardHeader, CardTitle } from '@/components/ui/card';
 import { Alert, AlertDescription } from '@/components/ui/alert';
 import { Badge } from '@/components/ui/badge';
@@ -14,6 +15,21 @@ interface SeatWithStudent extends Seat {
     phone: string;
     status?: string;
   } | null;
+  isPartiallyBooked?: boolean;
+}
+
+function describeSeat(seat: SeatWithStudent) {
+  if (seat.isAvailable) return `Seat ${seat.seatNumber} - Available all day`;
+
+  const who = (seat.occupants || [])
+    .map((occupant) => `${occupant.name} (${getShiftMeta(occupant.shift).label})`)
+    .join(', ');
+  const free = (seat.openShifts || [])
+    .filter((shift) => shift !== 'full')
+    .map((shift) => getShiftMeta(shift).label)
+    .join(', ');
+
+  return `Seat ${seat.seatNumber} - ${who || 'Occupied'}${free ? ` | Free for: ${free}` : ' | Fully booked'}`;
 }
 
 export default function SeatsPage() {
@@ -57,7 +73,9 @@ export default function SeatsPage() {
   // Filter seats based on search and status
   const filteredSeats = seats.filter((seat) => {
     const matchesSearch = seat.seatNumber.toString().includes(searchQuery) ||
-      (seat.assignedStudent?.name || '').toLowerCase().includes(searchQuery.toLowerCase());
+      (seat.occupants || []).some((occupant) =>
+        occupant.name.toLowerCase().includes(searchQuery.toLowerCase())
+      );
     const matchesFilter = filterStatus === 'all' ||
       (filterStatus === 'available' && seat.isAvailable) ||
       (filterStatus === 'occupied' && !seat.isAvailable);
@@ -225,14 +243,12 @@ export default function SeatsPage() {
                   ${
                     seat.isAvailable
                       ? 'bg-green-50/80 dark:bg-green-950/10 text-green-700 dark:text-green-300 border-green-200 dark:border-green-800 hover:bg-green-100 dark:hover:bg-green-950/20 hover:border-green-400 dark:hover:border-green-600 hover:scale-[1.03]'
-                      : 'bg-blue-50/80 dark:bg-blue-950/10 text-blue-700 dark:text-blue-300 border-blue-200 dark:border-blue-800 hover:bg-blue-100 dark:hover:bg-blue-950/20 hover:border-blue-400 dark:hover:border-blue-600 hover:scale-[1.03]'
+                      : seat.isPartiallyBooked
+                        ? 'bg-amber-50/80 dark:bg-amber-950/10 text-amber-700 dark:text-amber-300 border-amber-200 dark:border-amber-800 hover:bg-amber-100 dark:hover:bg-amber-950/20 hover:border-amber-400 dark:hover:border-amber-600 hover:scale-[1.03]'
+                        : 'bg-blue-50/80 dark:bg-blue-950/10 text-blue-700 dark:text-blue-300 border-blue-200 dark:border-blue-800 hover:bg-blue-100 dark:hover:bg-blue-950/20 hover:border-blue-400 dark:hover:border-blue-600 hover:scale-[1.03]'
                   }
                 `}
-                title={
-                  seat.isAvailable
-                    ? `Seat ${seat.seatNumber} - Available`
-                    : `Seat ${seat.seatNumber} - Occupied by ${seat.assignedStudent?.name || 'student'}`
-                }
+                title={describeSeat(seat)}
               >
                 <span className="text-sm font-bold leading-none">Seat</span>
                 <span className="text-lg font-black">{seat.seatNumber}</span>
@@ -244,7 +260,14 @@ export default function SeatsPage() {
                   <>
                     <User size={13} className="mt-0.5" />
                     <span className="max-w-full truncate text-[10px] font-semibold leading-tight">
-                      {seat.assignedStudent?.name || 'Occupied'}
+                      {(seat.occupants || []).map((o) => o.name).join(', ') ||
+                        seat.assignedStudent?.name ||
+                        'Occupied'}
+                    </span>
+                    <span className="max-w-full truncate text-[9px] leading-tight opacity-80">
+                      {(seat.occupants || [])
+                        .map((o) => getShiftMeta(o.shift).icon + getShiftMeta(o.shift).label)
+                        .join(' · ')}
                     </span>
                   </>
                 )}
@@ -266,8 +289,12 @@ export default function SeatsPage() {
               <span className="text-gray-600 dark:text-gray-400">Available</span>
             </div>
             <div className="flex items-center gap-2">
+              <div className="w-5 h-5 bg-amber-100 dark:bg-amber-950/20 border-2 border-amber-300 dark:border-amber-700 rounded-md" />
+              <span className="text-gray-600 dark:text-gray-400">Shared (shift free)</span>
+            </div>
+            <div className="flex items-center gap-2">
               <div className="w-5 h-5 bg-blue-100 dark:bg-blue-950/20 border-2 border-blue-300 dark:border-blue-700 rounded-md" />
-              <span className="text-gray-600 dark:text-gray-400">Occupied</span>
+              <span className="text-gray-600 dark:text-gray-400">Fully booked</span>
             </div>
           </div>
         </CardContent>
@@ -293,17 +320,50 @@ export default function SeatsPage() {
                     <p className="font-bold text-blue-700 dark:text-blue-300 text-sm">
                       Seat {seat.seatNumber}
                     </p>
-                    <Badge variant="secondary" className="text-[10px] px-1.5 py-0 h-5 bg-blue-100 dark:bg-blue-900/30 text-blue-700 dark:text-blue-300 border-none">
+                    <Badge
+                      variant="secondary"
+                      className={`text-[10px] px-1.5 py-0 h-5 border-none ${
+                        seat.isPartiallyBooked
+                          ? 'bg-amber-100 dark:bg-amber-900/30 text-amber-700 dark:text-amber-300'
+                          : 'bg-blue-100 dark:bg-blue-900/30 text-blue-700 dark:text-blue-300'
+                      }`}
+                    >
                       <User className="w-2.5 h-2.5 mr-0.5" />
-                      Occupied
+                      {seat.isPartiallyBooked ? 'Shared' : 'Occupied'}
                     </Badge>
                   </div>
-                  <p className="font-medium text-gray-900 dark:text-gray-100 text-sm truncate">
-                    {seat.assignedStudent?.name || 'Student assigned'}
-                  </p>
-                  {seat.assignedStudent?.phone && (
-                    <p className="text-xs text-gray-600 dark:text-gray-400 truncate mt-0.5">
-                      {seat.assignedStudent.phone}
+                  <div className="space-y-1.5">
+                    {(seat.occupants || []).map((occupant) => (
+                      <div key={occupant._id} className="flex items-start justify-between gap-2">
+                        <div className="min-w-0">
+                          <p className="truncate text-sm font-medium text-gray-900 dark:text-gray-100">
+                            {occupant.name}
+                          </p>
+                          <p className="truncate text-xs text-gray-600 dark:text-gray-400">
+                            {occupant.phone}
+                          </p>
+                        </div>
+                        <span
+                          className={`shrink-0 rounded-full border px-1.5 py-0.5 text-[10px] font-medium ${getShiftMeta(occupant.shift).badge}`}
+                          title={getShiftMeta(occupant.shift).time}
+                        >
+                          {getShiftMeta(occupant.shift).icon} {getShiftMeta(occupant.shift).label}
+                        </span>
+                      </div>
+                    ))}
+                    {(seat.occupants || []).length === 0 && (
+                      <p className="truncate text-sm font-medium text-gray-900 dark:text-gray-100">
+                        {seat.assignedStudent?.name || 'Student assigned'}
+                      </p>
+                    )}
+                  </div>
+                  {seat.isPartiallyBooked && (
+                    <p className="mt-2 border-t border-blue-200 pt-1.5 text-[11px] text-amber-700 dark:border-blue-800 dark:text-amber-400">
+                      Free for:{' '}
+                      {(seat.openShifts || [])
+                        .filter((s) => s !== 'full')
+                        .map((s) => getShiftMeta(s).label)
+                        .join(', ')}
                     </p>
                   )}
                 </div>
@@ -320,8 +380,10 @@ export default function SeatsPage() {
         </CardHeader>
         <CardContent className="text-sm text-blue-800 dark:text-blue-200">
           <p className="leading-relaxed">
-            Seats are automatically managed when you add, edit, or delete students. Each student gets a unique seat,
-            and no seat can be assigned to multiple students. Removing a student immediately frees their seat.
+            Seats are automatically managed when you add, edit, or delete students. A full-day student reserves the
+            seat for the whole day, but part-time students can share one seat across non-overlapping shifts — for
+            example a Morning student and an Evening student on the same seat. Removing a student immediately frees
+            their shift.
           </p>
         </CardContent>
       </Card>

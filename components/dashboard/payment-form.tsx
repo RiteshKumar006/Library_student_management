@@ -14,6 +14,7 @@ import {
   getCoveredBillingMonths,
   getPaidTillDateForMonths,
 } from '@/lib/fee-calculation';
+import { getShiftMeta, normalizeShift } from '@/lib/shifts';
 
 interface PaymentFormProps {
   student: Student;
@@ -214,6 +215,15 @@ export function PaymentForm({
               />
               <p className="text-xs text-gray-600">
                 Monthly fee: ₹{student.monthlyFee}
+                {normalizeShift(student.shift) !== 'full' && (
+                  <span className="ml-1 text-amber-700">
+                    ({getShiftMeta(student.shift).icon} {getShiftMeta(student.shift).label} shift rate
+                    {student.baseMonthlyFee && student.baseMonthlyFee !== student.monthlyFee
+                      ? `, full day is ₹${student.baseMonthlyFee}`
+                      : ''}
+                    )
+                  </span>
+                )}
               </p>
             </div>
 

@@ -3,6 +3,8 @@ import { getDatabase } from '@/lib/db';
 import { getTokenFromRequest, verifyToken } from '@/lib/auth';
 import { Student, FeeRecord, ApiResponse } from '@/types';
 import { PAYMENT_METHODS } from '@/lib/constants';
+import { normalizeShift, suggestedShiftFee } from '@/lib/shifts';
+import { findSeatShiftConflict } from '@/lib/seat-allocation';
 import {
   getCoveredBillingCycles,
   getDefaultFeePaidTillDate,
@@ -96,7 +98,10 @@ export async function POST(request: NextRequest) {
       feePaidTillDate,
       initialFeeStatus = 'paid',
       paymentMethod = 'cash',
+      shift,
     } = body;
+
+    const studentShift = normalizeShift(shift);
 
     if (!name || !phone || !monthlyFee) {
       return NextResponse.json(
@@ -119,8 +124,38 @@ export async function POST(request: NextRequest) {
       );
     }
 
+    // A seat can be shared, but only by students whose shifts don't overlap
+    if (seatNumber) {
+      const conflict = await findSeatShiftConflict(
+        studentsCollection,
+        parseInt(seatNumber),
+        studentShift
+      );
+      if (conflict) {
+        return NextResponse.json(
+          { success: false, message: conflict } as ApiResponse,
+          { status: 400 }
+        );
+      }
+    }
+
     const joining = toDateOnly(joiningDate || new Date());
-    const monthlyFeeAmount = parseFloat(monthlyFee);
+    // monthlyFee is the full-day rate; part-time students are billed their shift rate
+    const baseFeeAmount = parseFloat(body.baseMonthlyFee ?? monthlyFee);
+    const partTimeFeeAmount = parseFloat(body.partTimeFee);
+    const monthlyFeeAmount =
+      studentShift !== 'full' && Number.isFinite(partTimeFeeAmount) && partTimeFeeAmount > 0
+        ? partTimeFeeAmount
+        : studentShift !== 'full'
+          ? suggestedShiftFee(baseFeeAmount, studentShift)
+          : baseFeeAmount;
+
+    if (!Number.isFinite(monthlyFeeAmount) || monthlyFeeAmount <= 0) {
+      return NextResponse.json(
+        { success: false, message: 'Monthly fee must be greater than 0' } as ApiResponse,
+        { status: 400 }
+      );
+    }
     const normalizedAadharNumber = String(aadharNumber || '').replace(/\s/g, '');
     const hasManualPaidTillDate = Boolean(feePaidTillDate);
     const isInitialFeePaid = initialFeeStatus === 'paid' || hasManualPaidTillDate;
@@ -166,7 +201,9 @@ export async function POST(request: NextRequest) {
       feePaidTillDate: paidTillDate,
       nextDueDate,
       monthlyFee: monthlyFeeAmount,
+      baseMonthlyFee: baseFeeAmount,
       seatNumber: seatNumber ? parseInt(seatNumber) : null,
+      shift: studentShift,
       parentPhone: parentPhone || '',
       aadharNumber: normalizedAadharNumber,
       photoUrl: photoUrl || '',
